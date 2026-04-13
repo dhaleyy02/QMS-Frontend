@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>QMS | Admin Dashboard</title>
+    <link rel="icon" type="image/png" href="../images/tski.jpg">
+    <link rel="stylesheet" href="../css/admin_dashboard.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome 6 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="dashboard-container">
+            <!-- Header -->
+            <header class="dashboard-header">
+                <div class="header-left">
+                    <div class="tski-icon">
+                        <img src="../images/tski1.png" alt="TSKI">
+                    </div>
+                    <h1>Admin Dashboard</h1>
+                </div>
+                <div class="header-right">
+                    <div class="bible-verse">
+                        <i class="fas fa-cross verse-icon"></i>
+                        <span class="verse-text">"I can do all things through Christ who strengthens me"</span>
+                        <span class="verse-reference">- Philippians 4:13</span>
+                    </div>
+                    <div class="admin-info">
+                        <i class="fas fa-user-shield"></i>
+                        <span id="admin-name">Loading...</span>
+                    </div>
+                    <a href="../login.html" class="logout-btn" id="logoutBtn">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span>Logout</span>
+                    </a>
+                </div>
+            </header>
+
+            <!-- Navigation -->
+            <nav class="nav-bar">
+                <a href="admin_dashboard.html" class="nav-link active">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="admin_users.html" class="nav-link">
+                    <i class="fas fa-users"></i>
+                    <span>Users</span>
+                </a>
+                <a href="admin_documents.html" class="nav-link">
+                    <i class="fas fa-file-alt"></i>
+                    <span>Documents</span>
+                </a>
+                <a href="admin_templates.html" class="nav-link">
+                    <i class="fas fa-file-word"></i>
+                    <span>Templates</span>
+                </a>
+                <a href="admin_categories.html" class="nav-link">
+                    <i class="fas fa-folder"></i>
+                    <span>Categories</span>
+                </a>
+                <a href="admin_archive.html" class="nav-link">
+                    <i class="fas fa-archive"></i>
+                    <span>Archive</span>
+                </a>
+                <a href="admin_settings.html" class="nav-link">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </a>
+                <a href="admin_announcements.html" class="nav-link">
+                    <i class="fas fa-cog"></i>
+                    <span>Announcement</span>
+                </a>
+                <a href="admin_tasks.html" class="nav-link">
+                    <i class="fas fa-cog"></i>
+                    <span>Tasks</span>
+                </a>
+            </nav>
+
+            <!-- Status Message -->
+            <div id="status" class="status-message">
+                <i class="fas fa-spinner fa-pulse"></i>
+                <span>Loading dashboard...</span>
+            </div>
+
+            <!-- Statistics Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3>Total Users</h3>
+                        <div class="stat-number" id="total-users">0</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-user-clock"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3>Pending Users</h3>
+                        <div class="stat-number" id="pending-users">0</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-file-alt"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3>Total Documents</h3>
+                        <div class="stat-number" id="total-docs">0</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-hourglass-half"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3>Pending Documents</h3>
+                        <div class="stat-number" id="pending-docs">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pending Users Section -->
+            <section class="section-card">
+                <div class="section-header">
+                    <h2>
+                        <i class="fas fa-user-clock"></i>
+                        <span>Pending Users</span>
+                    </h2>
+                    <a href="admin_users.html" class="view-all">
+                        <span>View All</span>
+                        <i class="fas fa-arrow-right"></i>
+                    </a>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Department</th>
+                                <th>Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pending-users-table">
+                            <tr class="loading-row">
+                                <td colspan="5">
+                                    <i class="fas fa-spinner fa-pulse"></i>
+                                    <span>Loading pending users...</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Recent Documents Section -->
+            <section class="section-card">
+                <div class="section-header">
+                    <h2>
+                        <i class="fas fa-file-alt"></i>
+                        <span>Recent Documents</span>
+                    </h2>
+                    <a href="admin_documents.html" class="view-all">
+                        <span>View All</span>
+                        <i class="fas fa-arrow-right"></i>
+                    </a>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Owner</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-docs-table">
+                            <tr class="loading-row">
+                                <td colspan="4">
+                                    <i class="fas fa-spinner fa-pulse"></i>
+                                    <span>Loading documents...</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Footer -->
+            <footer class="dashboard-footer">
+                <div class="footer-content">
+                    <div class="footer-logo">
+                        <img src="../images/tski.jpg" alt="TSKI" class="footer-icon">
+                        <span>QMS Admin Portal</span>
+                    </div>
+                    <div class="footer-bible-verse">
+                        <i class="fas fa-cross"></i>
+                        <span>"Trust in the Lord with all your heart and lean not on your own understanding"</span>
+                        <span class="verse-ref">Proverbs 3:5-6</span>
+                    </div>
+                    <div class="footer-copyright">
+                        <span>&copy; 2024 TSKI Quality Management System. All rights reserved.</span>
+                    </div>
+                </div>
+            </footer>
+
+        </div> <!-- Close dashboard-container -->
+    </div> <!-- Close main-content -->
+
+    <script src="../js/api.js"></script>
+    <script>
+        // Your existing JavaScript code here (keep it as is)
+        // ==================== STATE ====================
+        let allUsers = [];
+        let allDepartments = [];
+        let allDocuments = [];
+
+        // ==================== AUTHENTICATION ====================
+        const admin = checkAuth();
+        if (admin.roleId !== 1) {
+            window.location.href = '../login.html';
+        }
+        document.getElementById('admin-name').textContent = admin.fullName;
+
+        // ==================== UTILITIES ====================
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function showStatus(message, isError = false, isSuccess = false) {
+            const statusDiv = document.getElementById('status');
+            let icon = 'fa-info-circle';
+            
+            if (isError) icon = 'fa-exclamation-triangle';
+            if (isSuccess) icon = 'fa-check-circle';
+            
+            statusDiv.innerHTML = `<i class="fas ${icon}"></i><span>${message}</span>`;
+            statusDiv.className = 'status-message';
+            
+            if (isError) statusDiv.classList.add('error');
+            if (isSuccess) statusDiv.classList.add('success');
+            
+            if (isSuccess) {
+                setTimeout(() => {
+                    statusDiv.style.opacity = '0';
+                    setTimeout(() => {
+                        statusDiv.innerHTML = '<i class="fas fa-info-circle"></i><span>Dashboard ready</span>';
+                        statusDiv.style.opacity = '1';
+                        statusDiv.classList.remove('success');
+                    }, 300);
+                }, 3000);
+            }
+        }
+
+        // ==================== DASHBOARD DATA ====================
+        async function loadDashboard() {
+            try {
+                showStatus('Loading dashboard data...');
+
+                const [users, docs, depts] = await Promise.all([
+                    fetchData('User'),
+                    fetchData('Document').catch(() => []),
+                    fetchData('Department').catch(() => [])
+                ]);
+
+                allUsers = users;
+                allDocuments = docs;
+                allDepartments = depts;
+
+                updateStatistics(users, docs);
+                renderPendingUsersTable(users);
+                renderRecentDocumentsTable(docs, users);
+
+                showStatus(`Loaded ${users.length} users and ${docs.length} documents`, false, true);
+
+            } catch (error) {
+                console.error('Dashboard error:', error);
+                showStatus(`Failed to load dashboard: ${error.message}`, true);
+            }
+        }
+
+        function updateStatistics(users, documents) {
+            const pendingUsers = users.filter(u => u.status === 'Pending').length;
+            const pendingDocs = documents.filter(d => d.status === 'Pending').length;
+            
+            document.getElementById('total-users').textContent = users.length;
+            document.getElementById('pending-users').textContent = pendingUsers;
+            document.getElementById('total-docs').textContent = documents.length;
+            document.getElementById('pending-docs').textContent = pendingDocs;
+        }
+
+        function renderPendingUsersTable(users) {
+            const pendingUsers = users.filter(u => u.status === 'Pending').slice(0, 5);
+            const tableBody = document.getElementById('pending-users-table');
+            
+            if (pendingUsers.length === 0) {
+                tableBody.innerHTML = `
+                    <tr class="empty-row">
+                        <td colspan="5">
+                            <i class="fas fa-check-circle"></i>
+                            <p>No pending users</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tableBody.innerHTML = pendingUsers.map(user => {
+                const department = allDepartments.find(d => d.departmentId === user.departmentId);
+                const departmentName = department ? escapeHtml(department.departmentName) : 'N/A';
+                const formattedDate = new Date(user.createdAt).toLocaleDateString();
+                
+                return `
+                    <tr>
+                        <td><strong>${escapeHtml(user.fullName)}</strong></td>
+                        <td>${escapeHtml(user.email)}</td>
+                        <td>${departmentName}</td>
+                        <td>${formattedDate}</td>
+                        <td class="actions-cell">
+                            <button class="action-btn approve" data-user-id="${user.userId}" data-action="approve">
+                                <i class="fas fa-check"></i>
+                                <span>Approve</span>
+                            </button>
+                            <button class="action-btn reject" data-user-id="${user.userId}" data-action="reject">
+                                <i class="fas fa-times"></i>
+                                <span>Reject</span>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            
+            attachActionButtonListeners();
+        }
+
+        function renderRecentDocumentsTable(documents, users) {
+            const recentDocs = [...documents].slice(-5).reverse();
+            const tableBody = document.getElementById('recent-docs-table');
+            
+            if (recentDocs.length === 0) {
+                tableBody.innerHTML = `
+                    <tr class="empty-row">
+                        <td colspan="4">
+                            <i class="fas fa-folder-open"></i>
+                            <p>No documents found</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tableBody.innerHTML = recentDocs.map(doc => {
+                const owner = users.find(u => u.userId === doc.uploadedBy);
+                const ownerName = owner ? escapeHtml(owner.fullName) : 'Unknown';
+                const formattedDate = new Date(doc.createdAt).toLocaleDateString();
+                
+                let statusClass = 'status-pending';
+                if (doc.status === 'Approved') statusClass = 'status-approved';
+                if (doc.status === 'Rejected') statusClass = 'status-rejected';
+                
+                return `
+                    <tr>
+                        <td>${escapeHtml(doc.title || 'Untitled')}</td>
+                        <td>${ownerName}</td>
+                        <td><span class="status-badge ${statusClass}">${doc.status}</span></td>
+                        <td>${formattedDate}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function attachActionButtonListeners() {
+            const approveButtons = document.querySelectorAll('.action-btn.approve');
+            const rejectButtons = document.querySelectorAll('.action-btn.reject');
+            
+            approveButtons.forEach(btn => {
+                btn.removeEventListener('click', handleApprove);
+                btn.addEventListener('click', handleApprove);
+            });
+            
+            rejectButtons.forEach(btn => {
+                btn.removeEventListener('click', handleReject);
+                btn.addEventListener('click', handleReject);
+            });
+        }
+
+        async function handleApprove(event) {
+            const button = event.currentTarget;
+            const userId = parseInt(button.dataset.userId);
+            if (!confirm('Approve this user?')) return;
+            await processUserAction(userId, 'approve');
+        }
+
+        async function handleReject(event) {
+            const button = event.currentTarget;
+            const userId = parseInt(button.dataset.userId);
+            if (!confirm('Reject this user?')) return;
+            await processUserAction(userId, 'reject');
+        }
+
+        async function processUserAction(userId, action) {
+            try {
+                const user = allUsers.find(u => u.userId === userId);
+                if (!user) throw new Error('User not found');
+                
+                if (action === 'approve') {
+                    user.status = 'Active';
+                    user.roleId = 2;
+                    await putData(`User/${userId}`, user);
+                    showStatus('User approved successfully!', false, true);
+                } else {
+                    user.status = 'Rejected';
+                    await putData(`User/${userId}`, user);
+                    showStatus('User rejected successfully!', false, true);
+                }
+                await loadDashboard();
+            } catch (error) {
+                showStatus(`Failed to ${action} user: ${error.message}`, true);
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('qms_user');
+        }
+        
+        document.getElementById('logoutBtn').addEventListener('click', function(e) {
+            e.preventDefault();
+            logout();
+            window.location.href = '../login.html';
+        });
+
+        loadDashboard();
+    </script>
+</body>
+</html>

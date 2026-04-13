@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QMS - User Management</title>
+</head>
+<body>
+    <h1>📋 QMS - User Management</h1>
+    <p id="admin-name">Loading...</p>
+    <a href="../login.html" onclick="logout()">🚪 Logout</a>
+    <hr>
+
+    <nav>
+        <a href="admin_dashboard.html">🏠 Dashboard</a> |
+        <a href="admin_users.html">👥 Users</a> |
+        <a href="admin_documents.html">📄 Documents</a>
+    </nav>
+    <hr>
+
+    <div id="status"></div>
+
+    <h2>👥 User Management</h2>
+    <button onclick="filterUsers('All')">All</button>
+    <button onclick="filterUsers('Pending')">⏳ Pending</button>
+    <button onclick="filterUsers('Active')">✅ Active</button>
+    <button onclick="filterUsers('Rejected')">❌ Rejected</button>
+    <button onclick="filterUsers('Inactive')">⚠️ Inactive</button>
+    <br><br>
+
+    <h3 id="table-title">All Users</h3>
+    <span id="user-count"></span>
+    <button onclick="openAdd()">➕ Add User</button>
+    <br><br>
+
+    <table border="1" cellpadding="8">
+        <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Department</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Actions</th>
+        </tr>
+        <tbody id="users-table">
+            <tr><td colspan="7" style="text-align:center;padding:40px;">🔄 Loading...</td></tr>
+        </tbody>
+    </table>
+
+    <!-- Add Form -->
+    <div id="add-form" style="display:none;padding:20px;border:1px solid #ccc;margin:20px 0;">
+        <h3>➕ Add User</h3>
+        <label>Name: <input type="text" id="add-name"></label><br><br>
+        <label>Email: <input type="email" id="add-email"></label><br><br>
+        <label>Password: <input type="password" id="add-password"></label><br><br>
+        <label>Department:
+            <select id="add-department">
+                <option value="">-- Select --</option>
+            </select>
+        </label><br><br>
+        <label>Role:
+            <select id="add-role">
+                <option value="1">Admin</option>
+                <option value="2" selected>User</option>
+            </select>
+        </label><br><br>
+        <label>Status:
+            <select id="add-status">
+                <option value="Active">Active</option>
+                <option value="Pending">Pending</option>
+                <option value="Inactive">Inactive</option>
+            </select>
+        </label><br><br>
+        <button onclick="addUser()">Add</button>
+        <button onclick="closeAdd()">Cancel</button>
+    </div>
+
+    <!-- Edit Form -->
+    <div id="edit-form" style="display:none;padding:20px;border:1px solid #ccc;margin:20px 0;">
+        <h3>✏️ Edit User</h3>
+        <input type="hidden" id="edit-id">
+        <label>Name: <input type="text" id="edit-name"></label><br><br>
+        <label>Email: <input type="email" id="edit-email"></label><br><br>
+        <label>Department:
+            <select id="edit-department">
+                <option value="">-- Select --</option>
+            </select>
+        </label><br><br>
+        <label>Role:
+            <select id="edit-role">
+                <option value="1">Admin</option>
+                <option value="2">User</option>
+            </select>
+        </label><br><br>
+        <label>Status:
+            <select id="edit-status">
+                <option value="Active">Active</option>
+                <option value="Pending">Pending</option>
+                <option value="Rejected">Rejected</option>
+                <option value="Inactive">Inactive</option>
+            </select>
+        </label><br><br>
+        <button onclick="saveEdit()">💾 Save</button>
+        <button onclick="closeEdit()">Cancel</button>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        let allUsers = [], allDepartments = [];
+
+        // ✅ Use checkAuth from api.js
+        const admin = checkAuth();
+        if (admin.roleId !== 1) window.location.href = '../login.html';
+        document.getElementById('admin-name').textContent = '👑 ' + admin.fullName;
+
+        function showStatus(msg, isError = false) {
+            const status = document.getElementById('status');
+            status.innerHTML = msg;
+            status.style.color = isError ? 'red' : 'green';
+        }
+
+        async function loadUsers() {
+            try {
+                document.getElementById('users-table').innerHTML = '<tr><td colspan="7">🔄 Loading...</td></tr>';
+
+                const [users, depts] = await Promise.all([
+                    fetchData('User'),
+                    fetchData('Department')
+                ]);
+
+                allUsers = users;
+                allDepartments = depts;
+
+                populateDepartments();
+                renderUsers(allUsers);
+                showStatus(`✅ ${allUsers.length} users loaded`);
+
+            } catch(error) {
+                showStatus('❌ ' + error.message, true);
+            }
+        }
+
+        function populateDepartments() {
+            const addSelect = document.getElementById('add-department');
+            const editSelect = document.getElementById('edit-department');
+            const options = '<option value="">-- Select --</option>' +
+                allDepartments.map(d =>
+                    `<option value="${d.departmentId}">${d.departmentName}</option>`
+                ).join('');
+            addSelect.innerHTML = options;
+            editSelect.innerHTML = options;
+        }
+
+        function renderUsers(users) {
+            document.getElementById('user-count').textContent = `(${users.length})`;
+            const tbody = document.getElementById('users-table');
+
+            if (!users.length) {
+                tbody.innerHTML = '<tr><td colspan="7">No users found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = users.map(u => {
+                const dept = allDepartments.find(d => d.departmentId == u.departmentId);
+                const role = u.roleId == 1 ? '👑 Admin' : '👤 User';
+                return `
+                    <tr>
+                        <td>${u.fullName || 'N/A'}</td>
+                        <td>${u.email}</td>
+                        <td>${dept ? dept.departmentName : 'N/A'}</td>
+                        <td>${role}</td>
+                        <td>${u.status}</td>
+                        <td>${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/A'}</td>
+                        <td>
+                            <button onclick="quickStatus(${u.userId},'Active')">✅ Approve</button>
+                            <button onclick="quickStatus(${u.userId},'Rejected')">❌ Reject</button>
+                            <button onclick="openEdit(${u.userId})">✏️ Edit</button>
+                            <button onclick="deleteUser(${u.userId})">🗑️ Delete</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function filterUsers(status) {
+            const filtered = status === 'All' ? allUsers : allUsers.filter(u => u.status === status);
+            document.getElementById('table-title').textContent = `${status} Users`;
+            renderUsers(filtered);
+        }
+
+        // ── ADD ──
+        function openAdd() {
+            document.getElementById('add-name').value = '';
+            document.getElementById('add-email').value = '';
+            document.getElementById('add-password').value = '';
+            document.getElementById('add-department').value = '';
+            document.getElementById('add-role').value = '2';
+            document.getElementById('add-status').value = 'Active';
+            document.getElementById('edit-form').style.display = 'none';
+            document.getElementById('add-form').style.display = 'block';
+        }
+
+        function closeAdd() {
+            document.getElementById('add-form').style.display = 'none';
+        }
+
+        async function addUser() {
+            const fullName = document.getElementById('add-name').value.trim();
+            const email = document.getElementById('add-email').value.trim();
+            const password = document.getElementById('add-password').value;
+            const departmentId = parseInt(document.getElementById('add-department').value);
+            const roleId = parseInt(document.getElementById('add-role').value);
+            const status = document.getElementById('add-status').value;
+
+            if (!fullName || !email || !password || !departmentId) {
+                showStatus('Please fill all fields!', true);
+                return;
+            }
+
+            if (allUsers.find(u => u.email === email)) {
+                showStatus('Email already exists!', true);
+                return;
+            }
+
+            try {
+                const hashedPassword = await hashPassword(password);
+                await postData('User', {
+                    fullName,
+                    email,
+                    password: hashedPassword,
+                    roleId,
+                    departmentId,
+                    status
+                });
+                showStatus('✅ User added!');
+                closeAdd();
+                loadUsers();
+            } catch(e) {
+                showStatus('❌ Add failed: ' + e.message, true);
+            }
+        }
+
+        // ── EDIT ──
+        function openEdit(id) {
+            const u = allUsers.find(x => x.userId === id);
+            document.getElementById('edit-id').value = u.userId;
+            document.getElementById('edit-name').value = u.fullName;
+            document.getElementById('edit-email').value = u.email;
+            document.getElementById('edit-department').value = u.departmentId;
+            document.getElementById('edit-role').value = u.roleId;
+            document.getElementById('edit-status').value = u.status;
+            document.getElementById('add-form').style.display = 'none';
+            document.getElementById('edit-form').style.display = 'block';
+        }
+
+        function closeEdit() {
+            document.getElementById('edit-form').style.display = 'none';
+        }
+
+        async function saveEdit() {
+            const id = parseInt(document.getElementById('edit-id').value);
+            const u = allUsers.find(x => x.userId === id);
+
+            u.fullName = document.getElementById('edit-name').value.trim();
+            u.email = document.getElementById('edit-email').value.trim();
+            u.departmentId = parseInt(document.getElementById('edit-department').value);
+            u.roleId = parseInt(document.getElementById('edit-role').value);
+            u.status = document.getElementById('edit-status').value;
+
+            try {
+                await putData(`User/${id}`, u);
+                showStatus('✅ User updated!');
+                closeEdit();
+                loadUsers();
+            } catch(e) {
+                showStatus('❌ Update failed: ' + e.message, true);
+            }
+        }
+
+        // ── QUICK STATUS ──
+        async function quickStatus(id, newStatus) {
+            if (!confirm(`Set status to ${newStatus}?`)) return;
+            try {
+                const u = allUsers.find(u => u.userId === id);
+                u.status = newStatus;
+                await putData(`User/${id}`, u);
+                showStatus(`✅ Status set to ${newStatus}!`);
+                loadUsers();
+            } catch(e) {
+                showStatus('❌ Update failed', true);
+            }
+        }
+
+        // ── DELETE ──
+        async function deleteUser(id) {
+            if (!confirm('Delete this user?')) return;
+            try {
+                await deleteData(`User/${id}`);
+                showStatus('🗑️ User deleted!');
+                loadUsers();
+            } catch(e) {
+                showStatus('❌ Delete failed', true);
+            }
+        }
+
+        loadUsers();
+    </script>
+</body>
+</html>

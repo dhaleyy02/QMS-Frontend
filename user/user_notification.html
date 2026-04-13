@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QMS - Notifications</title>
+</head>
+<body>
+    <h1>📋 QMS - Notifications</h1>
+    <p id="user-name">Loading...</p>
+    <a href="../login.html" onclick="logout()">🚪 Logout</a>
+    <hr>
+
+    <nav>
+        <a href="user_dashboard.html">🏠 Dashboard</a> |
+        <a href="user_announcements.html">📢 Announcements</a> |
+        <a href="user_documents.html">📄 My Documents</a> |
+        <a href="user_chat.html">💬 Chat</a> |
+        <a href="user_notifications.html">🔔 Notifications</a> |
+        <a href="user_settings.html">⚙️ Settings</a>
+    </nav>
+    <hr>
+
+    <div id="status"></div>
+
+    <h2>🔔 My Notifications</h2>
+    <button onclick="markAllRead()">✅ Mark All as Read</button>
+    <br><br>
+
+    <span id="notif-count"></span>
+    <br><br>
+
+    <div id="notifications-list">🔄 Loading...</div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        let allNotifications = [];
+
+        const currentUser = checkAuth();
+        if (currentUser.roleId === 1) window.location.href = '../admin/admin_dashboard.html';
+        document.getElementById('user-name').textContent = '👋 ' + currentUser.fullName;
+
+        function showStatus(msg, isError = false) {
+            const status = document.getElementById('status');
+            status.innerHTML = msg;
+            status.style.color = isError ? 'red' : 'green';
+        }
+
+        async function loadNotifications() {
+            try {
+                const notifications = await fetchData(`Notification/${currentUser.userId}`);
+                allNotifications = notifications;
+                renderNotifications(notifications);
+            } catch(e) {
+                showStatus('❌ ' + e.message, true);
+            }
+        }
+
+        function renderNotifications(notifications) {
+            const unread = notifications.filter(n => !n.isRead).length;
+            document.getElementById('notif-count').textContent =
+                `Total: ${notifications.length} | Unread: ${unread}`;
+
+            const container = document.getElementById('notifications-list');
+
+            if (!notifications.length) {
+                container.innerHTML = '<p>No notifications yet.</p>';
+                return;
+            }
+
+            container.innerHTML = notifications.map(n => {
+                const icon = n.type === 'approved' ? '✅'
+                    : n.type === 'rejected' ? '❌'
+                    : '🔔';
+                const bg = n.isRead ? '#f8f9fa' : '#fff3cd';
+                const border = n.type === 'approved' ? '#28a745'
+                    : n.type === 'rejected' ? '#dc3545'
+                    : '#17a2b8';
+
+                return `
+                    <div style="border:1px solid ${border}; border-left:4px solid ${border}; 
+                                padding:15px; margin:8px 0; border-radius:8px; 
+                                background:${bg}; ${!n.isRead ? 'font-weight:bold;' : ''}">
+                        <div style="display:flex; justify-content:space-between;">
+                            <span>${icon} ${n.title}</span>
+                            <button onclick="deleteNotif(${n.id})" style="background:none; border:none; cursor:pointer; color:red;">🗑️</button>
+                        </div>
+                        <p style="margin:5px 0; font-weight:normal;">${n.message}</p>
+                        <small style="color:gray;">${new Date(n.createdAt).toLocaleString()}</small>
+                        ${!n.isRead ? `<br><button onclick="markRead(${n.id})" style="font-size:0.8rem; margin-top:5px;">Mark as Read</button>` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function markAllRead() {
+            try {
+                await putData(`Notification/read/${currentUser.userId}`, {});
+                showStatus('✅ All marked as read!');
+                loadNotifications();
+            } catch(e) {
+                showStatus('❌ Failed', true);
+            }
+        }
+
+        async function markRead(id) {
+            try {
+                await putData(`Notification/read-one/${id}`, {});
+                loadNotifications();
+            } catch(e) {
+                showStatus('❌ Failed', true);
+            }
+        }
+
+        async function deleteNotif(id) {
+            try {
+                await deleteData(`Notification/${id}`);
+                loadNotifications();
+            } catch(e) {
+                showStatus('❌ Failed', true);
+            }
+        }
+
+        loadNotifications();
+    </script>
+</body>
+</html>

@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QMS - My Documents</title>
+    <style>
+        #preview-modal {
+            display:none;
+            position:fixed;
+            top:0; left:0;
+            width:100%; height:100%;
+            background:rgba(0,0,0,0.8);
+            z-index:9999;
+        }
+        #preview-container {
+            background:white;
+            margin:20px auto;
+            padding:20px;
+            width:90%;
+            height:90vh;
+            border-radius:10px;
+            display:flex;
+            flex-direction:column;
+        }
+        #preview-header {
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            margin-bottom:10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>📋 QMS - My Documents</h1>
+    <p id="user-name">Loading...</p>
+    <a href="../login.html" onclick="logout()">🚪 Logout</a>
+    <hr>
+
+    <nav>
+        <a href="user_dashboard.html">🏠 Dashboard</a> |
+        <a href="user_documents.html">📄 My Documents</a> |
+        <a href="user_templates.html">📝 Templates</a> |
+        <a href="user_settings.html">⚙️ Settings</a>
+    </nav>
+    <hr>
+
+    <div id="status"></div>
+
+    <h2>📄 My Documents</h2>
+
+    <!-- Upload Form -->
+    <h3>➕ Upload New Document</h3>
+    <label>Title</label><br>
+    <input type="text" id="doc-title" placeholder="Enter document title" style="width:300px;"><br><br>
+    <label>Category</label><br>
+    <select id="doc-category" style="width:310px;">
+        <option value="">-- Select Category --</option>
+    </select><br><br>
+    <label>Description (optional)</label><br>
+    <textarea id="doc-description" placeholder="Enter description" style="width:300px; height:80px;"></textarea><br><br>
+    <label>Attach File (PDF, Word, Excel)</label><br>
+    <input type="file" id="doc-file" accept=".pdf,.doc,.docx,.xls,.xlsx"><br><br>
+    <button onclick="uploadDocument()">📤 Upload Document</button>
+    <hr>
+
+    <!-- Filter -->
+    <button onclick="filterDocs('All')">All</button>
+    <button onclick="filterDocs('Pending')">⏳ Pending</button>
+    <button onclick="filterDocs('Approved')">✅ Approved</button>
+    <button onclick="filterDocs('Rejected')">❌ Rejected</button>
+    <br><br>
+
+    <h3 id="table-title">All My Documents</h3>
+    <span id="doc-count"></span>
+    <br><br>
+
+    <table border="1" cellpadding="8">
+        <tr>
+            <th>#</th>
+            <th>Title</th>
+            <th>Category</th>
+            <th>File</th>
+            <th>Status</th>
+            <th>Date</th>
+            <th>Actions</th>
+        </tr>
+        <tbody id="docs-table">
+            <tr><td colspan="7">🔄 Loading...</td></tr>
+        </tbody>
+    </table>
+
+    <!-- Document Details View -->
+    <div id="view-form" style="display:none; padding:20px; border:2px solid #333; margin:20px 0;">
+        <h3>📄 Document Details</h3>
+        <p><strong>Title:</strong> <span id="view-title"></span></p>
+        <p><strong>Category:</strong> <span id="view-category"></span></p>
+        <p><strong>Status:</strong> <span id="view-status"></span></p>
+        <p><strong>Description:</strong> <span id="view-description"></span></p>
+        <p><strong>Date:</strong> <span id="view-date"></span></p>
+        <p><strong>File:</strong> <span id="view-file"></span></p>
+        <br>
+        <button onclick="closeView()">❌ Close</button>
+    </div>
+
+    <!-- Edit Form -->
+    <div id="edit-form" style="display:none; padding:20px; border:1px solid #ccc; margin:20px 0;">
+        <h3>✏️ Edit Document</h3>
+        <input type="hidden" id="edit-id">
+        <label>Title</label><br>
+        <input type="text" id="edit-title" style="width:300px;"><br><br>
+        <label>Category</label><br>
+        <select id="edit-category" style="width:310px;"></select><br><br>
+        <label>Description</label><br>
+        <textarea id="edit-description" style="width:300px; height:80px;"></textarea><br><br>
+        <label>Replace File (optional)</label><br>
+        <input type="file" id="edit-file" accept=".pdf,.doc,.docx,.xls,.xlsx"><br><br>
+        <button onclick="saveEdit()">💾 Save</button>
+        <button onclick="closeEdit()">Cancel</button>
+    </div>
+
+    <!-- 👁️ Preview Modal -->
+    <div id="preview-modal">
+        <div id="preview-container">
+            <div id="preview-header">
+                <h3 id="preview-title">📄 Document Preview</h3>
+                <div>
+                    <a id="preview-download" href="#" target="_blank" style="margin-right:10px; padding:6px 12px; background:#1e3c72; color:white; text-decoration:none; border-radius:5px;">⬇️ Download</a>
+                    <button onclick="closePreview()">❌ Close</button>
+                </div>
+            </div>
+            <!-- PDF Preview -->
+            <iframe id="preview-frame" src="" style="width:100%; flex:1; border:none; height:100%;"></iframe>
+            <!-- Image Preview -->
+            <img id="preview-image" src="" style="width:100%; flex:1; object-fit:contain; display:none;">
+            <!-- Unsupported -->
+            <div id="preview-unsupported" style="display:none; text-align:center; padding:50px;">
+                <h3>⚠️ Preview not available for this file type</h3>
+                <p>Please download the file to view it.</p>
+                <br>
+                <a id="unsupported-download" href="#" target="_blank" style="padding:10px 20px; background:#1e3c72; color:white; text-decoration:none; border-radius:5px;">⬇️ Download File</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        let allDocs = [], allCategories = [];
+
+        const currentUser = checkAuth();
+        if (currentUser.roleId === 1) window.location.href = '../admin/admin_dashboard.html';
+        document.getElementById('user-name').textContent = '👋 ' + currentUser.fullName;
+
+        function showStatus(msg, isError = false) {
+            const status = document.getElementById('status');
+            status.innerHTML = msg;
+            status.style.color = isError ? 'red' : 'green';
+        }
+
+        async function loadDocuments() {
+            try {
+                showStatus('🔄 Loading...');
+                const [docs, cats] = await Promise.all([
+                    fetchData('Document').catch(() => []),
+                    fetchData('Category')
+                ]);
+
+                allDocs = docs.filter(d => d.uploadedBy === currentUser.userId);
+                allCategories = cats;
+
+                populateCategories();
+                renderDocs(allDocs);
+                showStatus(`✅ ${allDocs.length} documents loaded`);
+
+                // Pre-fill from template if selected
+                const selectedTemplate = localStorage.getItem('template_name');
+                if (selectedTemplate) {
+                    document.getElementById('doc-title').value = selectedTemplate;
+                    localStorage.removeItem('template_name');
+                }
+
+            } catch(e) {
+                showStatus('❌ ' + e.message, true);
+            }
+        }
+
+        function populateCategories() {
+            const options = '<option value="">-- Select Category --</option>' +
+                allCategories.map(c =>
+                    `<option value="${c.categoryId}">${c.categoryName}</option>`
+                ).join('');
+            document.getElementById('doc-category').innerHTML = options;
+            document.getElementById('edit-category').innerHTML = options;
+        }
+
+        function renderDocs(docs) {
+            document.getElementById('doc-count').textContent = `Total: ${docs.length}`;
+            const tbody = document.getElementById('docs-table');
+
+            if (!docs.length) {
+                tbody.innerHTML = '<tr><td colspan="7">No documents yet</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = docs.map((d, index) => {
+                const cat = allCategories.find(c => c.categoryId === d.categoryId);
+                const canEdit = d.status === 'Pending' || d.status === 'Rejected';
+                const fileBtn = d.filePath
+                    ? `<button onclick="previewDoc('${d.filePath}', '${d.fileName || 'Document'}', '${d.fileType || ''}')">👁️ Preview</button>`
+                    : 'No file';
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${d.title || 'N/A'}</td>
+                        <td>${cat ? cat.categoryName : 'N/A'}</td>
+                        <td>${fileBtn}</td>
+                        <td>${d.status}</td>
+                        <td>${new Date(d.createdAt).toLocaleDateString()}</td>
+                        <td>
+                            <button onclick="viewDoc(${d.documentId})">📋 Details</button>
+                            ${canEdit ? `<button onclick="openEdit(${d.documentId})">✏️ Edit</button>` : ''}
+                            ${canEdit ? `<button onclick="deleteDoc(${d.documentId})">🗑️ Delete</button>` : ''}
+                            ${!canEdit ? '<span style="color:gray;">🔒 Locked</span>' : ''}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function filterDocs(status) {
+            document.getElementById('table-title').textContent = status === 'All' ? 'All My Documents' : `${status} Documents`;
+            const filtered = status === 'All' ? allDocs : allDocs.filter(d => d.status === status);
+            renderDocs(filtered);
+        }
+
+        // ── PREVIEW ──
+        function previewDoc(filePath, fileName, fileType) {
+            const fileUrl = `http://localhost:5227${filePath}`;
+
+            document.getElementById('preview-title').textContent = `📄 ${fileName}`;
+            document.getElementById('preview-download').href = fileUrl;
+            document.getElementById('preview-modal').style.display = 'block';
+
+            // Hide all first
+            document.getElementById('preview-frame').style.display = 'none';
+            document.getElementById('preview-image').style.display = 'none';
+            document.getElementById('preview-unsupported').style.display = 'none';
+
+            // ✅ PDF
+            if (fileType.includes('pdf')) {
+                document.getElementById('preview-frame').src = fileUrl;
+                document.getElementById('preview-frame').style.display = 'block';
+            }
+            // ✅ Images
+            else if (fileType.includes('image')) {
+                document.getElementById('preview-image').src = fileUrl;
+                document.getElementById('preview-image').style.display = 'block';
+            }
+            // ⚠️ Word/Excel - not previewable locally
+            else {
+                document.getElementById('preview-unsupported').style.display = 'block';
+                document.getElementById('unsupported-download').href = fileUrl;
+            }
+        }
+
+        function closePreview() {
+            document.getElementById('preview-modal').style.display = 'none';
+            document.getElementById('preview-frame').src = '';
+            document.getElementById('preview-image').src = '';
+        }
+
+        // Close on backdrop click
+        document.getElementById('preview-modal').addEventListener('click', function(e) {
+            if (e.target === this) closePreview();
+        });
+
+        // Close on ESC
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closePreview();
+        });
+
+        // ── UPLOAD ──
+        async function uploadDocument() {
+            const title = document.getElementById('doc-title').value.trim();
+            const categoryId = document.getElementById('doc-category').value;
+            const description = document.getElementById('doc-description').value.trim();
+            const file = document.getElementById('doc-file').files[0];
+
+            if (!title || !categoryId) {
+                showStatus('❌ Please fill in title and category!', true);
+                return;
+            }
+
+            try {
+                showStatus('📤 Uploading...');
+
+                if (file) {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('title', title);
+                    formData.append('categoryId', categoryId);
+                    formData.append('uploadedBy', currentUser.userId);
+                    formData.append('description', description);
+                    await uploadFile(formData);
+                } else {
+                    await postData('Document', {
+                        title,
+                        categoryId: parseInt(categoryId),
+                        uploadedBy: currentUser.userId,
+                        description,
+                        status: 'Pending',
+                        createdAt: new Date().toISOString()
+                    });
+                }
+
+                document.getElementById('doc-title').value = '';
+                document.getElementById('doc-category').value = '';
+                document.getElementById('doc-description').value = '';
+                document.getElementById('doc-file').value = '';
+
+                showStatus('✅ Document uploaded successfully!');
+                loadDocuments();
+
+            } catch(e) {
+                showStatus('❌ Upload failed: ' + e.message, true);
+            }
+        }
+
+        // ── VIEW DETAILS ──
+        function viewDoc(id) {
+            const d = allDocs.find(x => x.documentId === id);
+            const cat = allCategories.find(c => c.categoryId === d.categoryId);
+
+            document.getElementById('view-title').textContent = d.title || 'N/A';
+            document.getElementById('view-category').textContent = cat ? cat.categoryName : 'N/A';
+            document.getElementById('view-status').textContent = d.status;
+            document.getElementById('view-description').textContent = d.description || 'No description';
+            document.getElementById('view-date').textContent = new Date(d.createdAt).toLocaleDateString();
+            document.getElementById('view-file').innerHTML = d.filePath
+                ? `<button onclick="previewDoc('${d.filePath}', '${d.fileName || 'Document'}', '${d.fileType || ''}')">👁️ Preview</button>
+                   <a href="http://localhost:5227${d.filePath}" target="_blank" style="margin-left:10px;">⬇️ Download</a>`
+                : 'No file attached';
+
+            document.getElementById('edit-form').style.display = 'none';
+            document.getElementById('view-form').style.display = 'block';
+            window.scrollTo(0, document.getElementById('view-form').offsetTop);
+        }
+
+        function closeView() {
+            document.getElementById('view-form').style.display = 'none';
+        }
+
+        // ── EDIT ──
+        function openEdit(id) {
+            const d = allDocs.find(x => x.documentId === id);
+            document.getElementById('edit-id').value = d.documentId;
+            document.getElementById('edit-title').value = d.title;
+            document.getElementById('edit-category').value = d.categoryId;
+            document.getElementById('edit-description').value = d.description || '';
+            document.getElementById('view-form').style.display = 'none';
+            document.getElementById('edit-form').style.display = 'block';
+            window.scrollTo(0, document.getElementById('edit-form').offsetTop);
+        }
+
+        function closeEdit() {
+            document.getElementById('edit-form').style.display = 'none';
+        }
+
+        async function saveEdit() {
+            const id = parseInt(document.getElementById('edit-id').value);
+            const d = allDocs.find(x => x.documentId === id);
+            const file = document.getElementById('edit-file').files[0];
+
+            d.title = document.getElementById('edit-title').value.trim();
+            d.categoryId = parseInt(document.getElementById('edit-category').value);
+            d.description = document.getElementById('edit-description').value.trim();
+
+            if (!d.title || !d.categoryId) {
+                showStatus('❌ Please fill in all fields!', true);
+                return;
+            }
+
+            try {
+                if (file) {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('title', d.title);
+                    formData.append('categoryId', d.categoryId);
+                    formData.append('uploadedBy', currentUser.userId);
+                    formData.append('description', d.description);
+                    await deleteData(`Document/${id}`);
+                    await uploadFile(formData);
+                } else {
+                    await putData(`Document/${id}`, d);
+                }
+
+                showStatus('✅ Document updated!');
+                closeEdit();
+                loadDocuments();
+            } catch(e) {
+                showStatus('❌ Update failed', true);
+            }
+        }
+
+        // ── DELETE ──
+        async function deleteDoc(id) {
+            if (!confirm('Delete this document?')) return;
+            try {
+                await deleteData(`Document/${id}`);
+                showStatus('🗑️ Document deleted!');
+                loadDocuments();
+            } catch(e) {
+                showStatus('❌ Delete failed', true);
+            }
+        }
+
+        loadDocuments();
+    </script>
+</body>
+</html>

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QMS - Templates</title>
+    <style>
+        #preview-modal {
+            display:none;
+            position:fixed;
+            top:0; left:0;
+            width:100%; height:100%;
+            background:rgba(0,0,0,0.8);
+            z-index:9999;
+        }
+        #preview-container {
+            background:white;
+            margin:20px auto;
+            padding:20px;
+            width:90%;
+            height:90vh;
+            border-radius:10px;
+            display:flex;
+            flex-direction:column;
+        }
+        #preview-header {
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            margin-bottom:10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>📋 QMS - Templates</h1>
+    <p id="user-name">Loading...</p>
+    <a href="../login.html" onclick="logout()">🚪 Logout</a>
+    <hr>
+
+    <nav>
+        <a href="user_dashboard.html">🏠 Dashboard</a> |
+        <a href="user_documents.html">📄 My Documents</a> |
+        <a href="user_templates.html">📝 Templates</a> |
+        <a href="user_settings.html">⚙️ Settings</a>
+    </nav>
+    <hr>
+
+    <div id="status"></div>
+
+    <h2>📝 Available Templates</h2>
+    <p>⬇️ Download a template, fill it in, then upload it as a document.</p>
+
+    <!-- How to use guide -->
+    <div style="background:#d4edda; padding:15px; border-radius:8px; margin-bottom:20px;">
+        <strong>📖 How to use templates:</strong>
+        <ol>
+            <li>👁️ <strong>Preview</strong> the template to see its content</li>
+            <li>⬇️ <strong>Download</strong> the template to your computer</li>
+            <li>✏️ <strong>Fill in</strong> the template using Word/Excel/PDF editor</li>
+            <li>📤 <strong>Upload</strong> the filled document via <a href="user_documents.html">My Documents</a></li>
+        </ol>
+    </div>
+
+    <!-- Search -->
+    <label>🔍 Search: </label>
+    <input type="text" id="search" placeholder="Search templates..." oninput="searchTemplates()">
+    <br><br>
+
+    <span id="template-count"></span>
+    <br><br>
+
+    <table border="1" cellpadding="8">
+        <tr>
+            <th>#</th>
+            <th>Template Name</th>
+            <th>Description</th>
+            <th>File Type</th>
+            <th>Created By</th>
+            <th>Date</th>
+            <th>Actions</th>
+        </tr>
+        <tbody id="templates-table">
+            <tr><td colspan="7">🔄 Loading...</td></tr>
+        </tbody>
+    </table>
+
+    <!-- Preview Modal -->
+    <div id="preview-modal">
+        <div id="preview-container">
+            <div id="preview-header">
+                <h3 id="preview-title">📄 Template Preview</h3>
+                <div>
+                    <a id="preview-download" href="#" download style="margin-right:10px; padding:6px 12px; background:#28a745; color:white; text-decoration:none; border-radius:5px;">⬇️ Download Template</a>
+                    <button onclick="closePreview()">❌ Close</button>
+                </div>
+            </div>
+            <iframe id="preview-frame" src="" style="width:100%; border:none; height:85%;"></iframe>
+            <img id="preview-image" src="" style="width:100%; object-fit:contain; display:none;">
+            <div id="preview-unsupported" style="display:none; text-align:center; padding:50px;">
+                <h3>⚠️ Preview not available for this file type</h3>
+                <p>Please download the template to view and fill it.</p>
+                <br>
+                <a id="unsupported-download" href="#" style="padding:10px 20px; background:#28a745; color:white; text-decoration:none; border-radius:5px;">⬇️ Download Template</a>
+                <br><br>
+                <a href="user_documents.html" style="padding:10px 20px; background:#1e3c72; color:white; text-decoration:none; border-radius:5px;">📤 Upload Filled Document</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        let allTemplates = [], allUsers = [];
+
+        const currentUser = checkAuth();
+        if (currentUser.roleId === 1) window.location.href = '../admin/admin_dashboard.html';
+        document.getElementById('user-name').textContent = '👋 ' + currentUser.fullName;
+
+        function showStatus(msg, isError = false) {
+            const status = document.getElementById('status');
+            status.innerHTML = msg;
+            status.style.color = isError ? 'red' : 'green';
+        }
+
+        async function loadTemplates() {
+            try {
+                showStatus('🔄 Loading...');
+                const [templates, users] = await Promise.all([
+                    fetchData('Template'),
+                    fetchData('User')
+                ]);
+                allTemplates = templates;
+                allUsers = users;
+                renderTemplates(allTemplates);
+                showStatus(`✅ ${templates.length} templates available`);
+            } catch(e) {
+                showStatus('❌ ' + e.message, true);
+            }
+        }
+
+        function renderTemplates(templates) {
+            document.getElementById('template-count').textContent = `Total: ${templates.length} template(s)`;
+            const tbody = document.getElementById('templates-table');
+
+            if (!templates.length) {
+                tbody.innerHTML = '<tr><td colspan="7">No templates available yet</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = templates.map((t, index) => {
+                const creator = allUsers.find(u => u.userId === t.createdBy);
+                const fileType = t.fileType || '';
+                const fileTypeBadge = fileType.includes('pdf') ? '📕 PDF'
+                    : fileType.includes('word') || fileType.includes('doc') ? '📘 Word'
+                    : fileType.includes('excel') || fileType.includes('sheet') ? '📗 Excel'
+                    : t.fileName ? '📄 File' : '❌ No file';
+
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td><strong>${t.templateName}</strong></td>
+                        <td>${t.description || 'N/A'}</td>
+                        <td>${fileTypeBadge}</td>
+                        <td>${creator ? creator.fullName : 'Admin'}</td>
+                        <td>${new Date(t.createdAt).toLocaleDateString()}</td>
+                        <td>
+                            ${t.filePath ? `
+                                <button onclick="previewTemplate('${t.filePath}', '${t.fileName || 'Template'}', '${fileType}')">👁️ Preview</button>
+                                <a href="http://localhost:5227${t.filePath}" download="${t.fileName || 'template'}" style="margin-left:5px;">⬇️ Download</a>
+                            ` : 'No file'}
+                            <a href="user_documents.html" style="margin-left:5px;">📤 Upload Filled</a>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function searchTemplates() {
+            const query = document.getElementById('search').value.toLowerCase();
+            const filtered = allTemplates.filter(t =>
+                t.templateName.toLowerCase().includes(query) ||
+                (t.description && t.description.toLowerCase().includes(query))
+            );
+            renderTemplates(filtered);
+        }
+
+        // ── PREVIEW ──
+        function previewTemplate(filePath, fileName, fileType) {
+            const fileUrl = `http://localhost:5227${filePath}`;
+
+            document.getElementById('preview-title').textContent = `📄 ${fileName}`;
+            document.getElementById('preview-download').href = fileUrl;
+            document.getElementById('preview-download').download = fileName;
+            document.getElementById('preview-modal').style.display = 'block';
+
+            document.getElementById('preview-frame').style.display = 'none';
+            document.getElementById('preview-image').style.display = 'none';
+            document.getElementById('preview-unsupported').style.display = 'none';
+
+            if (fileType.includes('pdf')) {
+                document.getElementById('preview-frame').src = fileUrl;
+                document.getElementById('preview-frame').style.display = 'block';
+            } else if (fileType.includes('image')) {
+                document.getElementById('preview-image').src = fileUrl;
+                document.getElementById('preview-image').style.display = 'block';
+            } else {
+                document.getElementById('preview-unsupported').style.display = 'block';
+                document.getElementById('unsupported-download').href = fileUrl;
+            }
+        }
+
+        function closePreview() {
+            document.getElementById('preview-modal').style.display = 'none';
+            document.getElementById('preview-frame').src = '';
+            document.getElementById('preview-image').src = '';
+        }
+
+        document.getElementById('preview-modal').addEventListener('click', function(e) {
+            if (e.target === this) closePreview();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closePreview();
+        });
+
+        loadTemplates();
+    </script>
+</body>
+</html>

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QMS - Announcements</title>
+</head>
+<body>
+    <h1>📋 QMS - Announcement Management</h1>
+    <p id="admin-name">Loading...</p>
+    <a href="../login.html" onclick="logout()">🚪 Logout</a>
+    <hr>
+
+    <nav>
+        <a href="admin_dashboard.html">🏠 Dashboard</a> |
+        <a href="admin_users.html">👥 Users</a> |
+        <a href="admin_documents.html">📄 Documents</a> |
+        <a href="admin_announcements.html">📢 Announcements</a> |
+        <a href="admin_tasks.html">✅ Tasks</a> |
+        <a href="admin_templates.html">📝 Templates</a> |
+        <a href="admin_categories.html">📁 Categories</a> |
+        <a href="admin_archive.html">🗃️ Archive</a> |
+        <a href="admin_settings.html">⚙️ Settings</a>
+    </nav>
+    <hr>
+
+    <div id="status"></div>
+
+    <!-- ➕ Create Announcement -->
+    <h2>➕ Create Announcement</h2>
+    <label>Title</label><br>
+    <input type="text" id="ann-title" placeholder="Enter announcement title" style="width:300px;"><br><br>
+    <label>Content</label><br>
+    <textarea id="ann-content" placeholder="Enter announcement content..." style="width:400px; height:100px;"></textarea><br><br>
+    <label>Link to Task (optional)</label><br>
+    <select id="ann-task" style="width:310px;">
+        <option value="">-- General Announcement (No Task) --</option>
+    </select><br><br>
+    <small style="color:gray;">⚠️ If you select a task, users will see a "Go to Task" button in their dashboard.</small><br><br>
+    <button onclick="createAnnouncement()">📢 Post Announcement</button>
+    <button onclick="clearForm()">🔄 Clear</button>
+    <hr>
+
+    <!-- Announcements List -->
+    <h2>📢 All Announcements <span id="ann-count"></span></h2>
+
+    <!-- Filter -->
+    <button onclick="filterAnn('All')">All</button>
+    <button onclick="filterAnn('Task')">✅ With Task</button>
+    <button onclick="filterAnn('General')">📢 General</button>
+    <br><br>
+
+    <div id="announcements-list">🔄 Loading...</div>
+
+    <!-- Edit Form -->
+    <div id="edit-form" style="display:none; padding:20px; border:1px solid #ccc; margin:20px 0;">
+        <h3>✏️ Edit Announcement</h3>
+        <input type="hidden" id="edit-id">
+        <label>Title</label><br>
+        <input type="text" id="edit-title" style="width:300px;"><br><br>
+        <label>Content</label><br>
+        <textarea id="edit-content" style="width:400px; height:100px;"></textarea><br><br>
+        <label>Link to Task (optional)</label><br>
+        <select id="edit-task" style="width:310px;">
+            <option value="">-- General Announcement (No Task) --</option>
+        </select><br><br>
+        <button onclick="saveEdit()">💾 Save</button>
+        <button onclick="closeEdit()">Cancel</button>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        let allAnnouncements = [], allTasks = [];
+
+        const admin = checkAuth();
+        if (admin.roleId !== 1) window.location.href = '../login.html';
+        document.getElementById('admin-name').textContent = '👑 ' + admin.fullName;
+
+        function showStatus(msg, isError = false) {
+            const status = document.getElementById('status');
+            status.innerHTML = msg;
+            status.style.color = isError ? 'red' : 'green';
+        }
+
+        async function loadData() {
+            try {
+                showStatus('🔄 Loading...');
+                const [announcements, tasks] = await Promise.all([
+                    fetchData('Announcement'),
+                    fetchData('Task')
+                ]);
+
+                allAnnouncements = announcements;
+                allTasks = tasks;
+
+                populateTaskDropdowns();
+                renderAnnouncements(allAnnouncements);
+                showStatus(`✅ ${announcements.length} announcements loaded`);
+            } catch(e) {
+                showStatus('❌ ' + e.message, true);
+            }
+        }
+
+        function populateTaskDropdowns() {
+            const openTasks = allTasks.filter(t => t.status === 'Open');
+            const options = '<option value="">-- General Announcement (No Task) --</option>' +
+                openTasks.map(t => {
+                    const deadline = t.deadline
+                        ? ` (Due: ${new Date(t.deadline).toLocaleDateString()})`
+                        : '';
+                    return `<option value="${t.id}">✅ ${t.title}${deadline}</option>`;
+                }).join('');
+            document.getElementById('ann-task').innerHTML = options;
+            document.getElementById('edit-task').innerHTML = options;
+        }
+
+        function renderAnnouncements(announcements) {
+            document.getElementById('ann-count').textContent = `(${announcements.length})`;
+            const container = document.getElementById('announcements-list');
+
+            if (!announcements.length) {
+                container.innerHTML = '<p>No announcements yet.</p>';
+                return;
+            }
+
+            container.innerHTML = announcements.map(a => {
+                const taskBadge = a.task
+                    ? `<span style="background:#d4edda; color:#155724; padding:3px 8px; border-radius:4px; font-size:0.85rem;">
+                        ✅ Linked to Task: <strong>${a.task.title}</strong>
+                        (${a.task.status} ${a.task.deadline ? '| Due: ' + new Date(a.task.deadline).toLocaleDateString() : ''})
+                       </span>`
+                    : `<span style="background:#d1ecf1; color:#0c5460; padding:3px 8px; border-radius:4px; font-size:0.85rem;">
+                        📢 General Announcement
+                       </span>`;
+
+                return `
+                    <div style="border:1px solid #ddd; padding:15px; margin:10px 0; border-radius:8px;">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                            <div>
+                                <h3>📢 ${a.title}</h3>
+                                <p>${a.content}</p>
+                                ${taskBadge}
+                                <br><small style="color:gray;">Posted by ${a.createdBy} on ${new Date(a.createdAt).toLocaleDateString()}</small>
+                            </div>
+                            <div>
+                                <button onclick="openEdit(${a.id})">✏️ Edit</button>
+                                <button onclick="deleteAnnouncement(${a.id})">🗑️ Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function filterAnn(type) {
+            let filtered = allAnnouncements;
+            if (type === 'Task') filtered = allAnnouncements.filter(a => a.taskId !== null);
+            if (type === 'General') filtered = allAnnouncements.filter(a => a.taskId === null);
+            renderAnnouncements(filtered);
+        }
+
+        // ── CREATE ──
+        async function createAnnouncement() {
+            const title = document.getElementById('ann-title').value.trim();
+            const content = document.getElementById('ann-content').value.trim();
+            const taskId = document.getElementById('ann-task').value;
+
+            if (!title || !content) {
+                showStatus('❌ Please fill in title and content!', true);
+                return;
+            }
+
+            try {
+                await postData('Announcement', {
+                    title,
+                    content,
+                    taskId: taskId ? parseInt(taskId) : null,
+                    createdBy: admin.userId,
+                    createdAt: new Date().toISOString()
+                });
+                clearForm();
+                showStatus('✅ Announcement posted!');
+                loadData();
+            } catch(e) {
+                showStatus('❌ Failed: ' + e.message, true);
+            }
+        }
+
+        function clearForm() {
+            document.getElementById('ann-title').value = '';
+            document.getElementById('ann-content').value = '';
+            document.getElementById('ann-task').value = '';
+        }
+
+        // ── EDIT ──
+        function openEdit(id) {
+            const a = allAnnouncements.find(x => x.id === id);
+            document.getElementById('edit-id').value = a.id;
+            document.getElementById('edit-title').value = a.title;
+            document.getElementById('edit-content').value = a.content;
+            document.getElementById('edit-task').value = a.taskId || '';
+            document.getElementById('edit-form').style.display = 'block';
+            window.scrollTo(0, document.getElementById('edit-form').offsetTop);
+        }
+
+        function closeEdit() {
+            document.getElementById('edit-form').style.display = 'none';
+        }
+
+        async function saveEdit() {
+            const id = parseInt(document.getElementById('edit-id').value);
+            const title = document.getElementById('edit-title').value.trim();
+            const content = document.getElementById('edit-content').value.trim();
+            const taskId = document.getElementById('edit-task').value;
+
+            if (!title || !content) {
+                showStatus('❌ Please fill in all fields!', true);
+                return;
+            }
+
+            try {
+                await putData(`Announcement/${id}`, {
+                    id,
+                    title,
+                    content,
+                    taskId: taskId ? parseInt(taskId) : null
+                });
+                showStatus('✅ Announcement updated!');
+                closeEdit();
+                loadData();
+            } catch(e) {
+                showStatus('❌ Update failed', true);
+            }
+        }
+
+        // ── DELETE ──
+        async function deleteAnnouncement(id) {
+            if (!confirm('Delete this announcement?')) return;
+            try {
+                await deleteData(`Announcement/${id}`);
+                showStatus('🗑️ Announcement deleted!');
+                loadData();
+            } catch(e) {
+                showStatus('❌ Delete failed', true);
+            }
+        }
+
+        loadData();
+    </script>
+</body>
+</html>

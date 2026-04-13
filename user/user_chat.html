@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QMS - Chat</title>
+    <style>
+        .chat-container {
+            display: flex;
+            height: 80vh;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .chat-sidebar {
+            width: 280px;
+            border-right: 1px solid #ddd;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+        .chat-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-header {
+            padding: 15px;
+            border-bottom: 1px solid #ddd;
+            background: #1e3c72;
+            color: white;
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            background: #fff;
+        }
+        .chat-input-area {
+            padding: 10px;
+            border-top: 1px solid #ddd;
+            background: #f8f9fa;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .chat-input-area input[type="text"] {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            outline: none;
+        }
+        .chat-input-area button {
+            padding: 8px 16px;
+            background: #1e3c72;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+        .message-bubble {
+            margin: 8px 0;
+            display: flex;
+            flex-direction: column;
+        }
+        .message-bubble.sent { align-items: flex-end; }
+        .message-bubble.received { align-items: flex-start; }
+        .message-bubble.system { align-items: center; }
+        .bubble {
+            max-width: 70%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+        }
+        .sent .bubble {
+            background: #1e3c72;
+            color: white;
+            border-bottom-right-radius: 3px;
+        }
+        .received .bubble {
+            background: #f0f0f0;
+            color: #333;
+            border-bottom-left-radius: 3px;
+        }
+        .system .bubble {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffc107;
+            font-size: 0.85rem;
+            max-width: 90%;
+            white-space: pre-line;
+        }
+        .message-time {
+            font-size: 0.72rem;
+            color: #999;
+            margin-top: 3px;
+        }
+        .conversation-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .conversation-item:hover { background: #e9ecef; }
+        .conversation-item.active { background: #d1e7ff; }
+        .unread-badge {
+            background: red;
+            color: white;
+            border-radius: 50%;
+            padding: 2px 6px;
+            font-size: 0.75rem;
+        }
+        .file-preview-chat {
+            max-width: 200px;
+            max-height: 150px;
+            border-radius: 8px;
+            margin-top: 5px;
+        }
+        .new-chat-btn {
+            width: 100%;
+            padding: 10px;
+            background: #1e3c72;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #user-select-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 999;
+        }
+        #user-select-box {
+            background: white;
+            margin: 100px auto;
+            padding: 20px;
+            width: 350px;
+            border-radius: 10px;
+        }
+        .user-select-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+        .user-select-item:hover { background: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <h1>📋 QMS - Chat</h1>
+    <p id="user-name">Loading...</p>
+    <a href="../login.html" onclick="logout()">🚪 Logout</a>
+    <hr>
+
+    <nav>
+        <a href="user_dashboard.html">🏠 Dashboard</a> |
+        <a href="user_announcements.html">📢 Announcements</a> |
+        <a href="user_documents.html">📄 My Documents</a> |
+        <a href="user_chat.html">💬 Chat</a> |
+        <a href="user_templates.html">📝 Templates</a> |
+        <a href="user_settings.html">⚙️ Settings</a>
+    </nav>
+    <hr>
+
+    <div id="status"></div>
+
+    <div class="chat-container">
+        <!-- Sidebar -->
+        <div class="chat-sidebar">
+            <button class="new-chat-btn" onclick="openUserSelect()">➕ New Chat</button>
+            <div id="conversations-list">
+                <p style="padding:15px; color:gray;">Loading conversations...</p>
+            </div>
+        </div>
+
+        <!-- Main Chat -->
+        <div class="chat-main">
+            <div class="chat-header">
+                <span id="chat-with-name">Select a conversation</span>
+                <span style="float:right; cursor:pointer;" onclick="refreshChat()">🔄</span>
+            </div>
+            <div class="chat-messages" id="chat-messages">
+                <p style="text-align:center; color:gray; margin-top:50px;">Select a conversation to start chatting</p>
+            </div>
+            <div class="chat-input-area" id="chat-input-area" style="display:none;">
+                <label for="file-input" style="cursor:pointer; font-size:1.3rem;" title="Attach file or photo">📎</label>
+                <input type="file" id="file-input" style="display:none;" onchange="sendFile()">
+                <input type="text" id="message-input" placeholder="Type a message..." onkeypress="handleKey(event)">
+                <button onclick="sendMsg()">Send ➤</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Select Modal -->
+    <div id="user-select-modal">
+        <div id="user-select-box">
+            <h3>💬 Start New Chat</h3>
+            <input type="text" id="user-search" placeholder="Search users..." oninput="filterUsers()" style="width:100%; padding:8px; margin-bottom:10px;">
+            <div id="user-select-list">Loading...</div>
+            <br>
+            <button onclick="closeUserSelect()">Cancel</button>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        let currentChatUserId = null;
+        let allUsers = [];
+        let refreshInterval = null;
+
+        const currentUser = checkAuth();
+        if (currentUser.roleId === 1) window.location.href = '../admin/admin_dashboard.html';
+        document.getElementById('user-name').textContent = '👋 ' + currentUser.fullName;
+
+        function showStatus(msg, isError = false) {
+            const status = document.getElementById('status');
+            status.innerHTML = msg;
+            status.style.color = isError ? 'red' : 'green';
+        }
+
+        async function loadConversations() {
+            try {
+                const conversations = await fetchData(`Message/conversations/${currentUser.userId}`);
+                const container = document.getElementById('conversations-list');
+
+                if (!conversations.length) {
+                    container.innerHTML = '<p style="padding:15px; color:gray;">No conversations yet.<br>Start a new chat!</p>';
+                    return;
+                }
+
+                container.innerHTML = conversations.map(c => `
+                    <div class="conversation-item ${currentChatUserId === c.partnerId ? 'active' : ''}"
+                         onclick="openChat(${c.partnerId}, '${c.partnerName}')">
+                        <div>
+                            <strong>👤 ${c.partnerName}</strong><br>
+                            <small style="color:gray;">${c.lastMessage ? c.lastMessage.substring(0, 30) + '...' : 'File attachment'}</small>
+                        </div>
+                        ${c.unreadCount > 0 ? `<span class="unread-badge">${c.unreadCount}</span>` : ''}
+                    </div>
+                `).join('');
+            } catch(e) {
+                console.error('Failed to load conversations:', e);
+            }
+        }
+
+        async function openChat(userId, userName) {
+            currentChatUserId = userId;
+            document.getElementById('chat-with-name').textContent = `💬 ${userName}`;
+            document.getElementById('chat-input-area').style.display = 'flex';
+            await loadMessages();
+            loadConversations();
+
+            if (refreshInterval) clearInterval(refreshInterval);
+            refreshInterval = setInterval(loadMessages, 5000);
+        }
+
+        async function loadMessages() {
+            if (!currentChatUserId) return;
+            try {
+                const messages = await fetchData(`Message/conversation/${currentUser.userId}/${currentChatUserId}`);
+                renderMessages(messages);
+            } catch(e) {
+                console.error('Failed to load messages:', e);
+            }
+        }
+
+        function renderMessages(messages) {
+            const container = document.getElementById('chat-messages');
+            if (!messages.length) {
+                container.innerHTML = '<p style="text-align:center; color:gray; margin-top:50px;">No messages yet. Say hello! 👋</p>';
+                return;
+            }
+
+            container.innerHTML = messages.map(m => {
+                const isSent = m.senderId === currentUser.userId;
+                const isSystem = m.isSystem;
+                const time = new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                const date = new Date(m.createdAt).toLocaleDateString();
+
+                let content = '';
+                if (m.messageText) content += `<div>${m.messageText}</div>`;
+                if (m.filePath) {
+                    const fileUrl = `http://localhost:5227${m.filePath}`;
+                    if (m.fileType && m.fileType.includes('image')) {
+                        content += `<img src="${fileUrl}" class="file-preview-chat"><br>`;
+                    } else {
+                        content += `<a href="${fileUrl}" target="_blank" style="color:${isSent ? 'white' : '#1e3c72'};">📎 ${m.fileName || 'View File'}</a>`;
+                    }
+                }
+
+                return `
+                    <div class="message-bubble ${isSystem ? 'system' : isSent ? 'sent' : 'received'}">
+                        <div class="bubble">
+                            ${isSystem ? '🔔 ' : ''}${content}
+                        </div>
+                        <span class="message-time">${date} ${time}</span>
+                    </div>
+                `;
+            }).join('');
+
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function sendMsg() {
+            const input = document.getElementById('message-input');
+            const text = input.value.trim();
+            if (!text || !currentChatUserId) return;
+
+            try {
+                await sendMessage(currentUser.userId, currentChatUserId, text);
+                input.value = '';
+                await loadMessages();
+            } catch(e) {
+                showStatus('❌ Failed to send message', true);
+            }
+        }
+
+        async function sendFile() {
+            const fileInput = document.getElementById('file-input');
+            const file = fileInput.files[0];
+            if (!file || !currentChatUserId) return;
+
+            try {
+                showStatus('📤 Sending...');
+                const formData = new FormData();
+                formData.append('senderId', currentUser.userId);
+                formData.append('receiverId', currentChatUserId);
+                formData.append('messageText', '');
+                formData.append('file', file);
+                await sendMessageFile(formData);
+                fileInput.value = '';
+                showStatus('✅ Sent!');
+                await loadMessages();
+            } catch(e) {
+                showStatus('❌ Failed to send file', true);
+            }
+        }
+
+        function handleKey(e) {
+            if (e.key === 'Enter') sendMsg();
+        }
+
+        function refreshChat() {
+            loadMessages();
+            loadConversations();
+        }
+
+        async function openUserSelect() {
+            try {
+                const users = await fetchData('User');
+                allUsers = users.filter(u => u.userId !== currentUser.userId && u.status === 'Active');
+                renderUserSelect(allUsers);
+                document.getElementById('user-select-modal').style.display = 'block';
+            } catch(e) {
+                showStatus('❌ Failed to load users', true);
+            }
+        }
+
+        function renderUserSelect(users) {
+            document.getElementById('user-select-list').innerHTML = users.map(u => `
+                <div class="user-select-item" onclick="startChat(${u.userId}, '${u.fullName}')">
+                    👤 <strong>${u.fullName}</strong>
+                    <small style="color:gray;"> — ${u.roleId === 1 ? '👑 Admin' : 'Dept User'}</small>
+                </div>
+            `).join('');
+        }
+
+        function filterUsers() {
+            const query = document.getElementById('user-search').value.toLowerCase();
+            renderUserSelect(allUsers.filter(u => u.fullName.toLowerCase().includes(query)));
+        }
+
+        function closeUserSelect() {
+            document.getElementById('user-select-modal').style.display = 'none';
+            document.getElementById('user-search').value = '';
+        }
+
+        function startChat(userId, userName) {
+            closeUserSelect();
+            openChat(userId, userName);
+            loadConversations();
+        }
+
+        loadConversations();
+    </script>
+</body>
+</html>

@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QMS - Templates</title>
+    <style>
+        #preview-modal {
+            display:none;
+            position:fixed;
+            top:0; left:0;
+            width:100%; height:100%;
+            background:rgba(0,0,0,0.8);
+            z-index:9999;
+        }
+        #preview-container {
+            background:white;
+            margin:20px auto;
+            padding:20px;
+            width:90%;
+            height:90vh;
+            border-radius:10px;
+            display:flex;
+            flex-direction:column;
+        }
+        #preview-header {
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            margin-bottom:10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>📋 QMS - Template Management</h1>
+    <p id="admin-name">Loading...</p>
+    <a href="../login.html" onclick="logout()">🚪 Logout</a>
+    <hr>
+
+    <nav>
+        <a href="admin_dashboard.html">🏠 Dashboard</a> |
+        <a href="admin_users.html">👥 Users</a> |
+        <a href="admin_documents.html">📄 Documents</a> |
+        <a href="admin_templates.html">📝 Templates</a> |
+        <a href="admin_categories.html">📁 Categories</a> |
+        <a href="admin_archive.html">🗃️ Archive</a> |
+        <a href="admin_settings.html">⚙️ Settings</a>
+    </nav>
+    <hr>
+
+    <div id="status"></div>
+
+    <!-- ➕ Upload Template -->
+    <h2>➕ Upload New Template</h2>
+    <label>Template Name</label><br>
+    <input type="text" id="template-name" placeholder="e.g. KPI Template, 5S Checklist" style="width:300px;"><br><br>
+    <label>Description (optional)</label><br>
+    <textarea id="template-description" placeholder="Describe what this template is for..." style="width:300px; height:60px;"></textarea><br><br>
+    <label>Attach File (PDF, Word, Excel) ⚠️ Required</label><br>
+    <input type="file" id="template-file" accept=".pdf,.doc,.docx,.xls,.xlsx"><br><br>
+    <button onclick="createTemplate()">📤 Upload Template</button>
+    <button onclick="clearForm()">🔄 Clear</button>
+    <hr>
+
+    <!-- Templates Table -->
+    <h2>📝 All Templates <span id="template-count"></span></h2>
+    <table border="1" cellpadding="8">
+        <tr>
+            <th>#</th>
+            <th>Template Name</th>
+            <th>Description</th>
+            <th>File Type</th>
+            <th>Preview / Download</th>
+            <th>Created By</th>
+            <th>Date</th>
+            <th>Actions</th>
+        </tr>
+        <tbody id="templates-table">
+            <tr><td colspan="8">🔄 Loading...</td></tr>
+        </tbody>
+    </table>
+
+    <!-- Edit Form -->
+    <div id="edit-form" style="display:none; padding:20px; border:1px solid #ccc; margin:20px 0;">
+        <h3>✏️ Edit Template</h3>
+        <input type="hidden" id="edit-id">
+        <label>Template Name</label><br>
+        <input type="text" id="edit-name" style="width:300px;"><br><br>
+        <label>Description</label><br>
+        <textarea id="edit-description" style="width:300px; height:60px;"></textarea><br><br>
+        <label>Replace File (optional)</label><br>
+        <input type="file" id="edit-file" accept=".pdf,.doc,.docx,.xls,.xlsx"><br><br>
+        <button onclick="saveEdit()">💾 Save</button>
+        <button onclick="closeEdit()">Cancel</button>
+    </div>
+
+    <!-- Preview Modal -->
+    <div id="preview-modal">
+        <div id="preview-container">
+            <div id="preview-header">
+                <h3 id="preview-title">📄 Template Preview</h3>
+                <div>
+                    <a id="preview-download" href="#" target="_blank" style="margin-right:10px; padding:6px 12px; background:#1e3c72; color:white; text-decoration:none; border-radius:5px;">⬇️ Download</a>
+                    <button onclick="closePreview()">❌ Close</button>
+                </div>
+            </div>
+            <iframe id="preview-frame" src="" style="width:100%; border:none; height:85%;"></iframe>
+            <img id="preview-image" src="" style="width:100%; object-fit:contain; display:none;">
+            <div id="preview-unsupported" style="display:none; text-align:center; padding:50px;">
+                <h3>⚠️ Preview not available for this file type</h3>
+                <p>Please download the file to view it.</p>
+                <br>
+                <a id="unsupported-download" href="#" target="_blank" style="padding:10px 20px; background:#1e3c72; color:white; text-decoration:none; border-radius:5px;">⬇️ Download File</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        let allTemplates = [], allUsers = [];
+
+        const admin = checkAuth();
+        if (admin.roleId !== 1) window.location.href = '../login.html';
+        document.getElementById('admin-name').textContent = '👑 ' + admin.fullName;
+
+        function showStatus(msg, isError = false) {
+            const status = document.getElementById('status');
+            status.innerHTML = msg;
+            status.style.color = isError ? 'red' : 'green';
+        }
+
+        async function loadTemplates() {
+            try {
+                showStatus('🔄 Loading...');
+                const [templates, users] = await Promise.all([
+                    fetchData('Template'),
+                    fetchData('User')
+                ]);
+                allTemplates = templates;
+                allUsers = users;
+                renderTemplates();
+                showStatus(`✅ ${templates.length} templates loaded`);
+            } catch(e) {
+                showStatus('❌ ' + e.message, true);
+            }
+        }
+
+        function renderTemplates() {
+            document.getElementById('template-count').textContent = `(${allTemplates.length})`;
+            const tbody = document.getElementById('templates-table');
+
+            if (!allTemplates.length) {
+                tbody.innerHTML = '<tr><td colspan="8">No templates yet. Upload your first template above!</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = allTemplates.map((t, index) => {
+                const creator = allUsers.find(u => u.userId === t.createdBy);
+                const fileType = t.fileType || '';
+                const fileTypeBadge = fileType.includes('pdf') ? '📕 PDF'
+                    : fileType.includes('word') || fileType.includes('doc') ? '📘 Word'
+                    : fileType.includes('excel') || fileType.includes('sheet') ? '📗 Excel'
+                    : t.fileName ? '📄 File' : '❌ No file';
+
+                const fileActions = t.filePath ? `
+                    <button onclick="previewTemplate('${t.filePath}', '${t.fileName || 'Template'}', '${fileType}')">👁️ Preview</button>
+                    <a href="http://localhost:5227${t.filePath}" download="${t.fileName || 'template'}" style="margin-left:5px;">⬇️ Download</a>
+                ` : 'No file uploaded';
+
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td><strong>${t.templateName}</strong></td>
+                        <td>${t.description || 'N/A'}</td>
+                        <td>${fileTypeBadge}</td>
+                        <td>${fileActions}</td>
+                        <td>${creator ? creator.fullName : 'N/A'}</td>
+                        <td>${new Date(t.createdAt).toLocaleDateString()}</td>
+                        <td>
+                            <button onclick="openEdit(${t.templateId})">✏️ Edit</button>
+                            <button onclick="deleteTemplate(${t.templateId})">🗑️ Delete</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // ── CREATE ──
+        async function createTemplate() {
+            const name = document.getElementById('template-name').value.trim();
+            const description = document.getElementById('template-description').value.trim();
+            const file = document.getElementById('template-file').files[0];
+
+            if (!name) {
+                showStatus('❌ Please enter a template name!', true);
+                return;
+            }
+            if (!file) {
+                showStatus('❌ Please attach a file!', true);
+                return;
+            }
+
+            try {
+                showStatus('📤 Uploading...');
+                const formData = new FormData();
+                formData.append('templateName', name);
+                formData.append('createdBy', admin.userId);
+                formData.append('description', description);
+                formData.append('file', file);
+                await uploadTemplate(formData);
+                clearForm();
+                showStatus('✅ Template uploaded successfully!');
+                loadTemplates();
+            } catch(e) {
+                showStatus('❌ Failed: ' + e.message, true);
+            }
+        }
+
+        function clearForm() {
+            document.getElementById('template-name').value = '';
+            document.getElementById('template-description').value = '';
+            document.getElementById('template-file').value = '';
+        }
+
+        // ── PREVIEW ──
+        function previewTemplate(filePath, fileName, fileType) {
+            const fileUrl = `http://localhost:5227${filePath}`;
+
+            document.getElementById('preview-title').textContent = `📄 ${fileName}`;
+            document.getElementById('preview-download').href = fileUrl;
+            document.getElementById('preview-modal').style.display = 'block';
+
+            document.getElementById('preview-frame').style.display = 'none';
+            document.getElementById('preview-image').style.display = 'none';
+            document.getElementById('preview-unsupported').style.display = 'none';
+
+            if (fileType.includes('pdf')) {
+                document.getElementById('preview-frame').src = fileUrl;
+                document.getElementById('preview-frame').style.display = 'block';
+            } else if (fileType.includes('image')) {
+                document.getElementById('preview-image').src = fileUrl;
+                document.getElementById('preview-image').style.display = 'block';
+            } else {
+                document.getElementById('preview-unsupported').style.display = 'block';
+                document.getElementById('unsupported-download').href = fileUrl;
+            }
+        }
+
+        function closePreview() {
+            document.getElementById('preview-modal').style.display = 'none';
+            document.getElementById('preview-frame').src = '';
+            document.getElementById('preview-image').src = '';
+        }
+
+        document.getElementById('preview-modal').addEventListener('click', function(e) {
+            if (e.target === this) closePreview();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closePreview();
+        });
+
+        // ── EDIT ──
+        function openEdit(id) {
+            const t = allTemplates.find(x => x.templateId === id);
+            document.getElementById('edit-id').value = t.templateId;
+            document.getElementById('edit-name').value = t.templateName;
+            document.getElementById('edit-description').value = t.description || '';
+            document.getElementById('edit-form').style.display = 'block';
+            window.scrollTo(0, document.getElementById('edit-form').offsetTop);
+        }
+
+        function closeEdit() {
+            document.getElementById('edit-form').style.display = 'none';
+        }
+
+        async function saveEdit() {
+            const id = parseInt(document.getElementById('edit-id').value);
+            const name = document.getElementById('edit-name').value.trim();
+            const description = document.getElementById('edit-description').value.trim();
+            const file = document.getElementById('edit-file').files[0];
+
+            if (!name) {
+                showStatus('❌ Please enter a template name!', true);
+                return;
+            }
+
+            try {
+                if (file) {
+                    // Delete old and upload new
+                    await deleteData(`Template/${id}`);
+                    const formData = new FormData();
+                    formData.append('templateName', name);
+                    formData.append('createdBy', admin.userId);
+                    formData.append('description', description);
+                    formData.append('file', file);
+                    await uploadTemplate(formData);
+                } else {
+                    await putData(`Template/${id}`, {
+                        templateId: id,
+                        templateName: name,
+                        description,
+                        createdBy: admin.userId
+                    });
+                }
+                showStatus('✅ Template updated!');
+                closeEdit();
+                loadTemplates();
+            } catch(e) {
+                showStatus('❌ Update failed: ' + e.message, true);
+            }
+        }
+
+        // ── DELETE ──
+        async function deleteTemplate(id) {
+            if (!confirm('Delete this template?')) return;
+            try {
+                await deleteData(`Template/${id}`);
+                showStatus('🗑️ Template deleted!');
+                loadTemplates();
+            } catch(e) {
+                showStatus('❌ Delete failed', true);
+            }
+        }
+
+        loadTemplates();
+    </script>
+</body>
+</html>

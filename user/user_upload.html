@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QMS - Upload for Task</title>
+</head>
+<body>
+    <h1>📋 QMS - Upload Document for Task</h1>
+    <p id="user-name">Loading...</p>
+    <a href="../login.html" onclick="logout()">🚪 Logout</a>
+    <hr>
+
+    <nav>
+        <a href="user_dashboard.html">🏠 Dashboard</a> |
+        <a href="user_announcements.html">📢 Announcements</a> |
+        <a href="user_documents.html">📄 My Documents</a> |
+        <a href="user_templates.html">📝 Templates</a> |
+        <a href="user_settings.html">⚙️ Settings</a>
+    </nav>
+    <hr>
+
+    <div id="status"></div>
+
+    <!-- Task Info -->
+    <div id="task-info" style="background:#d4edda; padding:15px; border-radius:8px; margin-bottom:20px; display:none;">
+        <h3 id="task-title">✅ Task</h3>
+        <p id="task-description"></p>
+        <p id="task-deadline"></p>
+        <p id="task-status"></p>
+    </div>
+
+    <h2>📤 Upload Document</h2>
+    <label>Title</label><br>
+    <input type="text" id="doc-title" placeholder="Enter document title" style="width:300px;"><br><br>
+    <label>Category</label><br>
+    <select id="doc-category" style="width:310px;">
+        <option value="">-- Select Category --</option>
+    </select><br><br>
+    <label>Description (optional)</label><br>
+    <textarea id="doc-description" placeholder="Enter description" style="width:300px; height:80px;"></textarea><br><br>
+    <label>Attach File (PDF, Word, Excel)</label><br>
+    <input type="file" id="doc-file" accept=".pdf,.doc,.docx,.xls,.xlsx"><br><br>
+    <button onclick="uploadDocument()">📤 Upload Document</button>
+    <a href="user_announcements.html" style="margin-left:10px;">← Back to Announcements</a>
+    <hr>
+
+    <!-- My uploads for this task -->
+    <h3>📄 My Uploads for this Task</h3>
+    <div id="my-uploads">Loading...</div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        let taskId = null;
+        let allCategories = [];
+
+        const currentUser = checkAuth();
+        if (currentUser.roleId === 1) window.location.href = '../admin/admin_dashboard.html';
+        document.getElementById('user-name').textContent = '👋 ' + currentUser.fullName;
+
+        function showStatus(msg, isError = false) {
+            const status = document.getElementById('status');
+            status.innerHTML = msg;
+            status.style.color = isError ? 'red' : 'green';
+        }
+
+        async function loadPage() {
+            // Get taskId from URL
+            const params = new URLSearchParams(window.location.search);
+            taskId = params.get('taskId');
+
+            try {
+                const cats = await fetchData('Category');
+                allCategories = cats;
+
+                // Populate categories
+                document.getElementById('doc-category').innerHTML =
+                    '<option value="">-- Select Category --</option>' +
+                    cats.map(c => `<option value="${c.categoryId}">${c.categoryName}</option>`).join('');
+
+                // Load task info if taskId exists
+                if (taskId) {
+                    const task = await fetchData(`Task/${taskId}`);
+                    if (task) {
+                        document.getElementById('task-info').style.display = 'block';
+                        document.getElementById('task-title').textContent = `✅ Task: ${task.title}`;
+                        document.getElementById('task-description').textContent = task.description || '';
+                        document.getElementById('task-deadline').textContent = task.deadline
+                            ? `📅 Deadline: ${new Date(task.deadline).toLocaleString()}`
+                            : '📅 No deadline set';
+                        document.getElementById('task-status').textContent = `Status: ${task.status}`;
+                        document.getElementById('doc-title').value = task.title;
+                    }
+                }
+
+                // Load my uploads
+                await loadMyUploads();
+
+            } catch(e) {
+                showStatus('❌ ' + e.message, true);
+            }
+        }
+
+        async function loadMyUploads() {
+            try {
+                const docs = await fetchData('Document');
+                const myDocs = docs.filter(d => d.uploadedBy === currentUser.userId);
+                const container = document.getElementById('my-uploads');
+
+                if (!myDocs.length) {
+                    container.innerHTML = '<p>No uploads yet for this task.</p>';
+                    return;
+                }
+
+                container.innerHTML = `
+                    <table border="1" cellpadding="8">
+                        <tr>
+                            <th>#</th>
+                            <th>Title</th>
+                            <th>Category</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                        </tr>
+                        ${myDocs.map((d, i) => {
+                            const cat = allCategories.find(c => c.categoryId === d.categoryId);
+                            return `
+                                <tr>
+                                    <td>${i + 1}</td>
+                                    <td>${d.title}</td>
+                                    <td>${cat ? cat.categoryName : 'N/A'}</td>
+                                    <td>${d.status}</td>
+                                    <td>${new Date(d.createdAt).toLocaleDateString()}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </table>
+                `;
+            } catch(e) {
+                document.getElementById('my-uploads').innerHTML = '<p>Failed to load uploads.</p>';
+            }
+        }
+
+        async function uploadDocument() {
+            const title = document.getElementById('doc-title').value.trim();
+            const categoryId = document.getElementById('doc-category').value;
+            const description = document.getElementById('doc-description').value.trim();
+            const file = document.getElementById('doc-file').files[0];
+
+            if (!title || !categoryId) {
+                showStatus('❌ Please fill in title and category!', true);
+                return;
+            }
+
+            try {
+                showStatus('📤 Uploading...');
+
+                if (file) {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('title', title);
+                    formData.append('categoryId', categoryId);
+                    formData.append('uploadedBy', currentUser.userId);
+                    formData.append('description', description);
+                    await uploadFile(formData);
+                } else {
+                    await postData('Document', {
+                        title,
+                        categoryId: parseInt(categoryId),
+                        uploadedBy: currentUser.userId,
+                        description,
+                        status: 'Pending',
+                        createdAt: new Date().toISOString()
+                    });
+                }
+
+                document.getElementById('doc-title').value = '';
+                document.getElementById('doc-category').value = '';
+                document.getElementById('doc-description').value = '';
+                document.getElementById('doc-file').value = '';
+
+                showStatus('✅ Document uploaded successfully! Admin will review it.');
+                await loadMyUploads();
+
+            } catch(e) {
+                showStatus('❌ Upload failed: ' + e.message, true);
+            }
+        }
+
+        loadPage();
+    </script>
+</body>
+</html>

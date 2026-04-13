@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QMS - Archive</title>
+    <style>
+        #preview-modal {
+            display:none;
+            position:fixed;
+            top:0; left:0;
+            width:100%; height:100%;
+            background:rgba(0,0,0,0.8);
+            z-index:9999;
+        }
+        #preview-container {
+            background:white;
+            margin:20px auto;
+            padding:20px;
+            width:90%;
+            height:90vh;
+            border-radius:10px;
+            display:flex;
+            flex-direction:column;
+        }
+        #preview-header {
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            margin-bottom:10px;
+        }
+        .folder-card {
+            border:1px solid #ccc;
+            padding:15px;
+            margin:10px 0;
+            border-radius:8px;
+            background:#f8f9fa;
+            cursor:pointer;
+        }
+        .folder-card:hover {
+            background:#e9ecef;
+        }
+        .folder-header {
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+        }
+        .folder-docs {
+            display:none;
+            margin-top:15px;
+        }
+    </style>
+</head>
+<body>
+    <h1>📋 QMS - Archive</h1>
+    <p id="admin-name">Loading...</p>
+    <a href="../login.html" onclick="logout()">🚪 Logout</a>
+    <hr>
+
+    <nav>
+        <a href="admin_dashboard.html">🏠 Dashboard</a> |
+        <a href="admin_users.html">👥 Users</a> |
+        <a href="admin_documents.html">📄 Documents</a> |
+        <a href="admin_templates.html">📝 Templates</a> |
+        <a href="admin_categories.html">📁 Categories</a> |
+        <a href="admin_archive.html">🗃️ Archive</a> |
+        <a href="admin_settings.html">⚙️ Settings</a>
+    </nav>
+    <hr>
+
+    <div id="status"></div>
+
+    <h2>🗃️ Document Archive</h2>
+    <p>Documents are organized by category. Click a folder to view documents inside.</p>
+
+    <!-- Search -->
+    <label>🔍 Search: </label>
+    <input type="text" id="search" placeholder="Search archived documents..." oninput="searchDocs()">
+    <button onclick="toggleView('folder')">📁 Folder View</button>
+    <button onclick="toggleView('list')">📋 List View</button>
+    <br><br>
+
+    <span id="total-count"></span>
+    <br><br>
+
+    <!-- Folder View -->
+    <div id="folder-view">
+        <div id="folders-container">Loading...</div>
+    </div>
+
+    <!-- List View -->
+    <div id="list-view" style="display:none;">
+        <table border="1" cellpadding="8" style="width:100%;">
+            <tr>
+                <th>#</th>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Uploaded By</th>
+                <th>Department</th>
+                <th>File</th>
+                <th>Date</th>
+                <th>Actions</th>
+            </tr>
+            <tbody id="list-table">
+                <tr><td colspan="8">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Preview Modal -->
+    <div id="preview-modal">
+        <div id="preview-container">
+            <div id="preview-header">
+                <h3 id="preview-title">📄 Document Preview</h3>
+                <div>
+                    <a id="preview-download" href="#" target="_blank" style="margin-right:10px; padding:6px 12px; background:#1e3c72; color:white; text-decoration:none; border-radius:5px;">⬇️ Download</a>
+                    <button onclick="closePreview()">❌ Close</button>
+                </div>
+            </div>
+            <iframe id="preview-frame" src="" style="width:100%; border:none; height:85%;"></iframe>
+            <img id="preview-image" src="" style="width:100%; object-fit:contain; display:none;">
+            <div id="preview-unsupported" style="display:none; text-align:center; padding:50px;">
+                <h3>⚠️ Preview not available</h3>
+                <a id="unsupported-download" href="#" target="_blank" style="padding:10px 20px; background:#1e3c72; color:white; text-decoration:none; border-radius:5px;">⬇️ Download File</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        let allArchived = [], allUsers = [], allDepartments = [], allCategories = [];
+        let currentView = 'folder';
+
+        const admin = checkAuth();
+        if (admin.roleId !== 1) window.location.href = '../login.html';
+        document.getElementById('admin-name').textContent = '👑 ' + admin.fullName;
+
+        function showStatus(msg, isError = false) {
+            const status = document.getElementById('status');
+            status.innerHTML = msg;
+            status.style.color = isError ? 'red' : 'green';
+        }
+
+        async function loadArchive() {
+            try {
+                showStatus('🔄 Loading...');
+                const [docs, users, depts, cats] = await Promise.all([
+                    fetchData('Document').catch(() => []),
+                    fetchData('User'),
+                    fetchData('Department'),
+                    fetchData('Category')
+                ]);
+
+                // Only archived documents
+                allArchived = docs.filter(d => d.status === 'Archived');
+                allUsers = users;
+                allDepartments = depts;
+                allCategories = cats;
+
+                document.getElementById('total-count').textContent =
+                    `Total: ${allArchived.length} archived document(s)`;
+
+                renderFolderView(allArchived);
+                renderListView(allArchived);
+                showStatus(`✅ ${allArchived.length} archived documents loaded`);
+
+            } catch(e) {
+                showStatus('❌ ' + e.message, true);
+            }
+        }
+
+        function toggleView(view) {
+            currentView = view;
+            if (view === 'folder') {
+                document.getElementById('folder-view').style.display = 'block';
+                document.getElementById('list-view').style.display = 'none';
+            } else {
+                document.getElementById('folder-view').style.display = 'none';
+                document.getElementById('list-view').style.display = 'block';
+            }
+        }
+
+        // ── FOLDER VIEW ──
+        function renderFolderView(docs) {
+            const container = document.getElementById('folders-container');
+
+            if (!docs.length) {
+                container.innerHTML = '<p>No archived documents found.</p>';
+                return;
+            }
+
+            // Group by category
+            const grouped = {};
+
+            // Add uncategorized group
+            grouped[0] = { name: 'Uncategorized', docs: [] };
+
+            allCategories.forEach(c => {
+                grouped[c.categoryId] = { name: c.categoryName, docs: [] };
+            });
+
+            docs.forEach(d => {
+                if (d.categoryId && grouped[d.categoryId]) {
+                    grouped[d.categoryId].docs.push(d);
+                } else {
+                    grouped[0].docs.push(d);
+                }
+            });
+
+            container.innerHTML = Object.entries(grouped)
+                .filter(([id, group]) => group.docs.length > 0)
+                .map(([id, group]) => `
+                    <div class="folder-card">
+                        <div class="folder-header" onclick="toggleFolder(${id})">
+                            <h3>📁 ${group.name} <small>(${group.docs.length} document(s))</small></h3>
+                            <span id="arrow-${id}">▼</span>
+                        </div>
+                        <div class="folder-docs" id="folder-docs-${id}">
+                            <table border="1" cellpadding="8" style="width:100%;">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Title</th>
+                                    <th>Uploaded By</th>
+                                    <th>Department</th>
+                                    <th>File</th>
+                                    <th>Date</th>
+                                    <th>Actions</th>
+                                </tr>
+                                ${group.docs.map((d, index) => renderDocRow(d, index)).join('')}
+                            </table>
+                        </div>
+                    </div>
+                `).join('');
+        }
+
+        function toggleFolder(id) {
+            const folderDocs = document.getElementById(`folder-docs-${id}`);
+            const arrow = document.getElementById(`arrow-${id}`);
+            if (folderDocs.style.display === 'none' || folderDocs.style.display === '') {
+                folderDocs.style.display = 'block';
+                arrow.textContent = '▲';
+            } else {
+                folderDocs.style.display = 'none';
+                arrow.textContent = '▼';
+            }
+        }
+
+        function renderDocRow(d, index) {
+            const uploader = allUsers.find(u => u.userId === d.uploadedBy);
+            const dept = uploader ? allDepartments.find(dep => dep.departmentId === uploader.departmentId) : null;
+            const fileBtn = d.filePath
+                ? `<button onclick="previewDoc('${d.filePath}', '${d.fileName || 'Document'}', '${d.fileType || ''}')">👁️ Preview</button>`
+                : 'No file';
+            return `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${d.title || 'N/A'}</td>
+                    <td>${uploader ? uploader.fullName : 'N/A'}</td>
+                    <td>${dept ? dept.departmentName : 'N/A'}</td>
+                    <td>${fileBtn}</td>
+                    <td>${new Date(d.createdAt).toLocaleDateString()}</td>
+                    <td>
+                        <button onclick="restoreDoc(${d.documentId})">♻️ Restore</button>
+                        <button onclick="deleteDoc(${d.documentId})">🗑️ Delete</button>
+                    </td>
+                </tr>
+            `;
+        }
+
+        // ── LIST VIEW ──
+        function renderListView(docs) {
+            const tbody = document.getElementById('list-table');
+            if (!docs.length) {
+                tbody.innerHTML = '<tr><td colspan="8">No archived documents</td></tr>';
+                return;
+            }
+            tbody.innerHTML = docs.map((d, index) => {
+                const cat = allCategories.find(c => c.categoryId === d.categoryId);
+                return `<tr>
+                    ${renderDocRow(d, index).replace('<tr>', '').replace('</tr>', '')}
+                </tr>`.replace(
+                    `<td>${index + 1}</td>`,
+                    `<td>${index + 1}</td><td>${cat ? cat.categoryName : 'N/A'}</td>`
+                );
+            }).join('');
+        }
+
+        // ── SEARCH ──
+        function searchDocs() {
+            const query = document.getElementById('search').value.toLowerCase();
+            const filtered = allArchived.filter(d =>
+                d.title && d.title.toLowerCase().includes(query)
+            );
+            document.getElementById('total-count').textContent =
+                `Total: ${filtered.length} archived document(s)`;
+            renderFolderView(filtered);
+            renderListView(filtered);
+        }
+
+        // ── PREVIEW ──
+        function previewDoc(filePath, fileName, fileType) {
+            const fileUrl = `http://localhost:5227${filePath}`;
+            document.getElementById('preview-title').textContent = `📄 ${fileName}`;
+            document.getElementById('preview-download').href = fileUrl;
+            document.getElementById('preview-modal').style.display = 'block';
+
+            document.getElementById('preview-frame').style.display = 'none';
+            document.getElementById('preview-image').style.display = 'none';
+            document.getElementById('preview-unsupported').style.display = 'none';
+
+            if (fileType.includes('pdf')) {
+                document.getElementById('preview-frame').src = fileUrl;
+                document.getElementById('preview-frame').style.display = 'block';
+            } else if (fileType.includes('image')) {
+                document.getElementById('preview-image').src = fileUrl;
+                document.getElementById('preview-image').style.display = 'block';
+            } else {
+                document.getElementById('preview-unsupported').style.display = 'block';
+                document.getElementById('unsupported-download').href = fileUrl;
+            }
+        }
+
+        function closePreview() {
+            document.getElementById('preview-modal').style.display = 'none';
+            document.getElementById('preview-frame').src = '';
+            document.getElementById('preview-image').src = '';
+        }
+
+        document.getElementById('preview-modal').addEventListener('click', function(e) {
+            if (e.target === this) closePreview();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closePreview();
+        });
+
+        // ── RESTORE ──
+        async function restoreDoc(id) {
+            if (!confirm('Restore this document to Approved?')) return;
+            try {
+                const d = allArchived.find(x => x.documentId === id);
+                d.status = 'Approved';
+                await putData(`Document/${id}`, d);
+                showStatus('♻️ Document restored to Approved!');
+                loadArchive();
+            } catch(e) {
+                showStatus('❌ Restore failed', true);
+            }
+        }
+
+        // ── DELETE ──
+        async function deleteDoc(id) {
+            if (!confirm('Permanently delete this document? This cannot be undone!')) return;
+            try {
+                await deleteData(`Document/${id}`);
+                showStatus('🗑️ Document permanently deleted!');
+                loadArchive();
+            } catch(e) {
+                showStatus('❌ Delete failed', true);
+            }
+        }
+
+        loadArchive();
+    </script>
+</body>
+</html>

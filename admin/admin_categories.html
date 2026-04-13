@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QMS - Categories</title>
+</head>
+<body>
+    <h1>📋 QMS - Category Management</h1>
+    <p id="admin-name">Loading...</p>
+    <a href="../login.html" onclick="logout()">🚪 Logout</a>
+    <hr>
+
+    <nav>
+        <a href="admin_dashboard.html">🏠 Dashboard</a> |
+        <a href="admin_users.html">👥 Users</a> |
+        <a href="admin_documents.html">📄 Documents</a> |
+        <a href="admin_templates.html">📝 Templates</a> |
+        <a href="admin_categories.html">📁 Categories</a> |
+        <a href="admin_archive.html">🗃️ Archive</a> |
+        <a href="admin_settings.html">⚙️ Settings</a>
+    </nav>
+    <hr>
+
+    <div id="status"></div>
+
+    <h2>📁 Category Management</h2>
+
+    <!-- Add Category Form -->
+    <h3>➕ Add New Category</h3>
+    <input type="text" id="category-name" placeholder="Enter category name">
+    <button onclick="addCategory()">➕ Add</button>
+    <hr>
+
+    <!-- Categories Table -->
+    <h3>📋 All Categories <span id="category-count"></span></h3>
+    <table border="1" cellpadding="8">
+        <tr>
+            <th>#</th>
+            <th>Category Name</th>
+            <th>Total Documents</th>
+            <th>Actions</th>
+        </tr>
+        <tbody id="categories-table">
+            <tr><td colspan="4">🔄 Loading...</td></tr>
+        </tbody>
+    </table>
+
+    <!-- Edit Form -->
+    <div id="edit-form" style="display:none; padding:20px; border:1px solid #ccc; margin:20px 0;">
+        <h3>✏️ Edit Category</h3>
+        <input type="hidden" id="edit-id">
+        <label>Category Name</label><br>
+        <input type="text" id="edit-name" placeholder="Enter category name"><br><br>
+        <button onclick="saveEdit()">💾 Save</button>
+        <button onclick="closeEdit()">Cancel</button>
+    </div>
+
+    <!-- Documents in Category -->
+    <div id="docs-section" style="display:none; margin:20px 0;">
+        <h3>📄 Documents in: <span id="selected-category-name"></span>
+            <button onclick="closeDocs()" style="margin-left:10px;">❌ Close</button>
+        </h3>
+
+        <!-- Filter by status inside category -->
+        <button onclick="filterCatDocs('All')">All</button>
+        <button onclick="filterCatDocs('Pending')">⏳ Pending</button>
+        <button onclick="filterCatDocs('Approved')">✅ Approved</button>
+        <button onclick="filterCatDocs('Rejected')">❌ Rejected</button>
+        <button onclick="filterCatDocs('Archived')">🗃️ Archived</button>
+        <br><br>
+
+        <span id="cat-doc-count"></span>
+        <br><br>
+
+        <table border="1" cellpadding="8">
+            <tr>
+                <th>#</th>
+                <th>Title</th>
+                <th>Uploaded By</th>
+                <th>Department</th>
+                <th>File</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th>Actions</th>
+            </tr>
+            <tbody id="cat-docs-table">
+                <tr><td colspan="8">No documents</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Document Detail View -->
+    <div id="view-form" style="display:none; padding:20px; border:2px solid #333; margin:20px 0;">
+        <h3>📄 Document Details</h3>
+        <p><strong>Title:</strong> <span id="view-title"></span></p>
+        <p><strong>Category:</strong> <span id="view-category"></span></p>
+        <p><strong>Uploaded By:</strong> <span id="view-uploader"></span></p>
+        <p><strong>Department:</strong> <span id="view-dept"></span></p>
+        <p><strong>Status:</strong> <span id="view-status"></span></p>
+        <p><strong>Description:</strong> <span id="view-description"></span></p>
+        <p><strong>Date:</strong> <span id="view-date"></span></p>
+        <p><strong>File:</strong> <span id="view-file"></span></p>
+        <br>
+        <button onclick="closeView()">❌ Close</button>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        let allCategories = [], allDocs = [], allUsers = [], allDepartments = [];
+        let currentCategoryDocs = [];
+
+        const admin = checkAuth();
+        if (admin.roleId !== 1) window.location.href = '../login.html';
+        document.getElementById('admin-name').textContent = '👑 ' + admin.fullName;
+
+        function showStatus(msg, isError = false) {
+            const status = document.getElementById('status');
+            status.innerHTML = msg;
+            status.style.color = isError ? 'red' : 'green';
+        }
+
+        async function loadCategories() {
+            try {
+                const [categories, docs, users, depts] = await Promise.all([
+                    fetchData('Category'),
+                    fetchData('Document').catch(() => []),
+                    fetchData('User'),
+                    fetchData('Department')
+                ]);
+
+                allCategories = categories;
+                allDocs = docs;
+                allUsers = users;
+                allDepartments = depts;
+
+                renderCategories(categories);
+                showStatus(`✅ ${categories.length} categories loaded`);
+            } catch(e) {
+                showStatus('❌ Failed to load categories', true);
+            }
+        }
+
+        function renderCategories(categories) {
+            document.getElementById('category-count').textContent = `(${categories.length})`;
+            const tbody = document.getElementById('categories-table');
+
+            if (!categories.length) {
+                tbody.innerHTML = '<tr><td colspan="4">No categories found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = categories.map((c, index) => {
+                const docCount = allDocs.filter(d => d.categoryId === c.categoryId).length;
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${c.categoryName}</td>
+                        <td>${docCount} document(s)</td>
+                        <td>
+                            <button onclick="viewCategory(${c.categoryId})">👁️ View Documents</button>
+                            <button onclick="openEdit(${c.categoryId})">✏️ Edit</button>
+                            <button onclick="deleteCategory(${c.categoryId})">🗑️ Delete</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // ── VIEW CATEGORY DOCUMENTS ──
+        function viewCategory(categoryId) {
+            const cat = allCategories.find(c => c.categoryId === categoryId);
+            currentCategoryDocs = allDocs.filter(d => d.categoryId === categoryId);
+
+            document.getElementById('selected-category-name').textContent = cat.categoryName;
+            document.getElementById('docs-section').style.display = 'block';
+            document.getElementById('edit-form').style.display = 'none';
+            document.getElementById('view-form').style.display = 'none';
+
+            renderCatDocs(currentCategoryDocs);
+            window.scrollTo(0, document.getElementById('docs-section').offsetTop);
+        }
+
+        function filterCatDocs(status) {
+            const filtered = status === 'All'
+                ? currentCategoryDocs
+                : currentCategoryDocs.filter(d => d.status === status);
+            renderCatDocs(filtered);
+        }
+
+        function renderCatDocs(docs) {
+            document.getElementById('cat-doc-count').textContent = `Total: ${docs.length} document(s)`;
+            const tbody = document.getElementById('cat-docs-table');
+
+            if (!docs.length) {
+                tbody.innerHTML = '<tr><td colspan="8">No documents in this category</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = docs.map((d, index) => {
+                const uploader = allUsers.find(u => u.userId === d.uploadedBy);
+                const dept = uploader ? allDepartments.find(dep => dep.departmentId === uploader.departmentId) : null;
+                const fileLink = d.filePath
+                    ? `<a href="http://localhost:5227${d.filePath}" target="_blank">📎 ${d.fileName || 'View'}</a>`
+                    : 'No file';
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${d.title || 'N/A'}</td>
+                        <td>${uploader ? uploader.fullName : 'N/A'}</td>
+                        <td>${dept ? dept.departmentName : 'N/A'}</td>
+                        <td>${fileLink}</td>
+                        <td>${d.status}</td>
+                        <td>${new Date(d.createdAt).toLocaleDateString()}</td>
+                        <td>
+                            <button onclick="viewDoc(${d.documentId})">👁️ View</button>
+                            <button onclick="quickStatus(${d.documentId}, 'Approved')">✅</button>
+                            <button onclick="quickStatus(${d.documentId}, 'Rejected')">❌</button>
+                            <button onclick="quickStatus(${d.documentId}, 'Archived')">🗃️</button>
+                            <button onclick="deleteDoc(${d.documentId})">🗑️</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function closeDocs() {
+            document.getElementById('docs-section').style.display = 'none';
+            document.getElementById('view-form').style.display = 'none';
+        }
+
+        // ── VIEW DOCUMENT ──
+        function viewDoc(id) {
+            const d = allDocs.find(x => x.documentId === id);
+            const cat = allCategories.find(c => c.categoryId === d.categoryId);
+            const uploader = allUsers.find(u => u.userId === d.uploadedBy);
+            const dept = uploader ? allDepartments.find(dep => dep.departmentId === uploader.departmentId) : null;
+
+            document.getElementById('view-title').textContent = d.title || 'N/A';
+            document.getElementById('view-category').textContent = cat ? cat.categoryName : 'N/A';
+            document.getElementById('view-uploader').textContent = uploader ? uploader.fullName : 'N/A';
+            document.getElementById('view-dept').textContent = dept ? dept.departmentName : 'N/A';
+            document.getElementById('view-status').textContent = d.status;
+            document.getElementById('view-description').textContent = d.description || 'No description';
+            document.getElementById('view-date').textContent = new Date(d.createdAt).toLocaleDateString();
+            document.getElementById('view-file').innerHTML = d.filePath
+                ? `<a href="http://localhost:5227${d.filePath}" target="_blank">📎 ${d.fileName || 'View File'}</a>`
+                : 'No file attached';
+
+            document.getElementById('view-form').style.display = 'block';
+            window.scrollTo(0, document.getElementById('view-form').offsetTop);
+        }
+
+        function closeView() {
+            document.getElementById('view-form').style.display = 'none';
+        }
+
+        // ── QUICK STATUS ──
+        async function quickStatus(id, newStatus) {
+            if (!confirm(`Set document to ${newStatus}?`)) return;
+            try {
+                const d = allDocs.find(x => x.documentId === id);
+                d.status = newStatus;
+                await putData(`Document/${id}`, d);
+                showStatus(`✅ Document ${newStatus}!`);
+                loadCategories();
+            } catch(e) {
+                showStatus('❌ Update failed', true);
+            }
+        }
+
+        // ── DELETE DOC ──
+        async function deleteDoc(id) {
+            if (!confirm('Delete this document?')) return;
+            try {
+                await deleteData(`Document/${id}`);
+                showStatus('🗑️ Document deleted!');
+                loadCategories();
+            } catch(e) {
+                showStatus('❌ Delete failed', true);
+            }
+        }
+
+        // ── ADD CATEGORY ──
+        async function addCategory() {
+            const name = document.getElementById('category-name').value.trim();
+            if (!name) {
+                showStatus('❌ Please enter a category name!', true);
+                return;
+            }
+            if (allCategories.find(c => c.categoryName.toLowerCase() === name.toLowerCase())) {
+                showStatus('❌ Category already exists!', true);
+                return;
+            }
+            try {
+                await postData('Category', { categoryName: name });
+                document.getElementById('category-name').value = '';
+                showStatus('✅ Category added!');
+                loadCategories();
+            } catch(e) {
+                showStatus('❌ Failed to add category', true);
+            }
+        }
+
+        // ── EDIT CATEGORY ──
+        function openEdit(id) {
+            const c = allCategories.find(x => x.categoryId === id);
+            document.getElementById('edit-id').value = c.categoryId;
+            document.getElementById('edit-name').value = c.categoryName;
+            document.getElementById('docs-section').style.display = 'none';
+            document.getElementById('edit-form').style.display = 'block';
+            window.scrollTo(0, document.body.scrollHeight);
+        }
+
+        function closeEdit() {
+            document.getElementById('edit-form').style.display = 'none';
+        }
+
+        async function saveEdit() {
+            const id = parseInt(document.getElementById('edit-id').value);
+            const name = document.getElementById('edit-name').value.trim();
+            if (!name) {
+                showStatus('❌ Please enter a category name!', true);
+                return;
+            }
+            try {
+                await putData(`Category/${id}`, { categoryId: id, categoryName: name });
+                showStatus('✅ Category updated!');
+                closeEdit();
+                loadCategories();
+            } catch(e) {
+                showStatus('❌ Failed to update category', true);
+            }
+        }
+
+        // ── DELETE CATEGORY ──
+        async function deleteCategory(id) {
+            if (!confirm('Delete this category? This may affect existing documents!')) return;
+            try {
+                await deleteData(`Category/${id}`);
+                showStatus('🗑️ Category deleted!');
+                loadCategories();
+            } catch(e) {
+                showStatus('❌ Failed to delete. Category may be in use!', true);
+            }
+        }
+
+        document.getElementById('category-name').addEventListener('keypress', e => {
+            if (e.key === 'Enter') addCategory();
+        });
+
+        loadCategories();
+    </script>
+</body>
+</html>

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QMS - User Dashboard</title>
+</head>
+<body>
+    <h1>👤 QMS - User Dashboard</h1>
+    <p id="user-name">Loading...</p>
+    <a href="../login.html" onclick="logout()">🚪 Logout</a>
+    <hr>
+
+    <nav>
+        <a href="user_dashboard.html">🏠 Dashboard</a> |
+        <a href="user_announcements.html">📢 Announcements</a> |
+        <a href="user_documents.html">📄 My Documents</a> |
+        <a href="user_chat.html" id="chat-badge">💬 Chat</a> |
+        <a href="user_notifications.html" id="notif-badge">🔔 Notifications</a> |
+        <a href="user_templates.html">📝 Templates</a> |
+        <a href="user_settings.html">⚙️ Settings</a>
+    </nav>
+    <hr>
+
+    <div id="status"></div>
+
+    <h2>📊 Your Stats</h2>
+    <p>📄 Your Documents: <strong id="my-docs">0</strong></p>
+    <p>✅ Approved: <strong id="approved-docs">0</strong></p>
+    <p>⏳ Pending: <strong id="pending-docs">0</strong></p>
+    <hr>
+
+    <h2>📢 Latest Announcements</h2>
+    <a href="user_announcements.html">View All →</a>
+    <div id="announcements-preview">Loading...</div>
+    <hr>
+
+    <h2>📄 Your Recent Documents</h2>
+    <button onclick="loadDashboard()">🔄 Refresh</button>
+    <table border="1" cellpadding="8">
+        <tr>
+            <th>Title</th>
+            <th>Category</th>
+            <th>Status</th>
+            <th>Date</th>
+        </tr>
+        <tbody id="my-docs-table">
+            <tr><td colspan="4">Loading...</td></tr>
+        </tbody>
+    </table>
+
+    <script src="../js/api.js"></script>
+    <script>
+        let allDocuments = [], allCategories = [];
+
+        // ✅ Auth check
+        const currentUser = checkAuth();
+        if (currentUser.roleId === 1) window.location.href = '../admin/admin_dashboard.html';
+        document.getElementById('user-name').textContent = '👋 ' + currentUser.fullName;
+
+        function showStatus(msg, error = false) {
+            const status = document.getElementById('status');
+            status.innerHTML = msg;
+            status.style.color = error ? 'red' : 'green';
+        }
+
+        // ✅ Load announcements inside async function
+        async function loadAnnouncements() {
+            try {
+                const announcements = await fetchData('Announcement').catch(() => []);
+                const annContainer = document.getElementById('announcements-preview');
+                const latest = announcements.slice(0, 3);
+                annContainer.innerHTML = latest.length ? latest.map(a => `
+                    <div style="border:1px solid #ddd; padding:10px; margin:5px 0; border-radius:6px;
+                         ${a.taskId ? 'border-left:4px solid #28a745;' : 'border-left:4px solid #17a2b8;'}">
+                        <strong>${a.taskId ? '✅' : '📢'} ${a.title}</strong><br>
+                        <small>${a.content.substring(0, 100)}...</small><br>
+                        ${a.taskId
+                            ? `<a href="user_upload.html?taskId=${a.taskId}" style="color:#28a745; font-weight:bold;">📤 Go to Task →</a>`
+                            : '<small style="color:gray;">General announcement</small>'
+                        }
+                    </div>
+                `).join('') : '<p>No announcements yet.</p>';
+            } catch(e) {
+                document.getElementById('announcements-preview').innerHTML = '<p>Failed to load announcements.</p>';
+            }
+        }
+
+        async function loadDashboard() {
+            try {
+                showStatus('🔄 Loading...');
+
+                const [docs, categories] = await Promise.all([
+                    fetchData('Document').catch(() => []),
+                    fetchData('Category').catch(() => [])
+                ]);
+
+                allDocuments = docs;
+                allCategories = categories;
+
+                // My documents only
+                const myDocs = docs.filter(d => d.uploadedBy === currentUser.userId);
+                const approved = myDocs.filter(d => d.status === 'Approved');
+                const pending = myDocs.filter(d => d.status === 'Pending');
+
+                // Stats
+                document.getElementById('my-docs').textContent = myDocs.length;
+                document.getElementById('approved-docs').textContent = approved.length;
+                document.getElementById('pending-docs').textContent = pending.length;
+
+                // Table
+                const table = document.getElementById('my-docs-table');
+                table.innerHTML = myDocs.length ?
+                    myDocs.slice(0, 10).map(d => {
+                        const cat = categories.find(c => c.categoryId === d.categoryId);
+                        return `<tr>
+                            <td>${d.title}</td>
+                            <td>${cat ? cat.categoryName : 'N/A'}</td>
+                            <td>${d.status}</td>
+                            <td>${new Date(d.createdAt).toLocaleDateString()}</td>
+                        </tr>`;
+                    }).join('') : '<tr><td colspan="4">No documents yet</td></tr>';
+
+                showStatus(`✅ ${myDocs.length} documents loaded`);
+
+            } catch(e) {
+                showStatus(`❌ ${e.message}`, true);
+            }
+        }
+
+        // ✅ Load badge counts
+        async function loadBadges() {
+            try {
+                const [notifCount, chatCount] = await Promise.all([
+                    getUnreadNotifications(currentUser.userId),
+                    getUnreadMessages(currentUser.userId)
+                ]);
+
+                const notifBadge = notifCount > 0 ? ` 🔴${notifCount}` : '';
+                const chatBadge = chatCount > 0 ? ` 🔴${chatCount}` : '';
+
+                document.getElementById('notif-badge').textContent = `🔔 Notifications${notifBadge}`;
+                document.getElementById('chat-badge').textContent = `💬 Chat${chatBadge}`;
+            } catch(e) {
+                console.error('Failed to load badges');
+            }
+        }
+
+        // ✅ Run all on page load
+        loadDashboard();
+        loadAnnouncements();
+        loadBadges();
+    </script>
+</body>
+</html>

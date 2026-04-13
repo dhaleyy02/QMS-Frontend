@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QMS - Admin Settings</title>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.2.0/dist/signature_pad.umd.min.js"></script>
+    <style>
+        #signature-canvas {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            background-color: white;
+            touch-action: none;
+            width: 100%;
+            height: 200px;
+        }
+        #signature-preview {
+            margin-top: 10px;
+            text-align: center;
+        }
+        #signature-image {
+            max-width: 300px;
+            max-height: 100px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .signature-controls {
+            margin-top: 10px;
+        }
+        .signature-controls button {
+            margin-right: 10px;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .save-signature { background: #28a745; color: white; }
+        .clear-signature { background: #6c757d; color: white; }
+        .remove-signature { background: #dc3545; color: white; }
+        .download-signature { background: #007bff; color: white; }
+    </style>
+</head>
+<body>
+    <h1>📋 QMS - Admin Settings</h1>
+    <p id="admin-name">Loading...</p>
+    <a href="../login.html" onclick="logout()">🚪 Logout</a>
+    <hr>
+
+    <nav>
+        <a href="admin_dashboard.html">🏠 Dashboard</a> |
+        <a href="admin_users.html">👥 Users</a> |
+        <a href="admin_documents.html">📄 Documents</a> |
+        <a href="admin_templates.html">📝 Templates</a> |
+        <a href="admin_categories.html">📁 Categories</a> |
+        <a href="admin_archive.html">🗃️ Archive</a> |
+        <a href="admin_settings.html">⚙️ Settings</a>
+    </nav>
+    <hr>
+
+    <div id="status"></div>
+
+    <h2>⚙️ Account Settings</h2>
+
+    <!-- Update Name -->
+    <h3>📝 Update Name</h3>
+    <label>Full Name</label><br>
+    <input type="text" id="update-name" placeholder="Enter new name"><br><br>
+    <button onclick="updateName()">💾 Save Name</button>
+    <hr>
+
+    <!-- Update Password -->
+    <h3>🔒 Change Password</h3>
+    <label>Current Password</label><br>
+    <input type="password" id="current-password" placeholder="Enter current password"><br><br>
+    <label>New Password</label><br>
+    <input type="password" id="new-password" placeholder="Enter new password"><br><br>
+    <label>Confirm New Password</label><br>
+    <input type="password" id="confirm-password" placeholder="Confirm new password"><br><br>
+    <button onclick="updatePassword()">🔒 Change Password</button>
+    <hr>
+
+    <!-- E-Signature -->
+    <h3>✍️ E-Signature</h3>
+    <p>Draw your electronic signature below. This will be used for document approvals.</p>
+    <canvas id="signature-canvas"></canvas>
+    <div class="signature-controls">
+        <button class="save-signature" onclick="saveSignature()">💾 Save Signature</button>
+        <button class="clear-signature" onclick="clearSignature()">🗑️ Clear</button>
+    </div>
+    <div id="signature-preview" style="display: none;">
+        <img id="signature-image" alt="Signature Preview">
+        <div class="signature-controls">
+            <button class="download-signature" id="download-btn" onclick="downloadSignature()" style="display: none;">⬇️ Download</button>
+            <button class="remove-signature" id="remove-btn" onclick="removeSignature()" style="display: none;">❌ Remove</button>
+        </div>
+    </div>
+    <hr>
+
+    <!-- Account Info -->
+    <h3>👤 Account Info</h3>
+    <p>Email: <strong id="info-email"></strong></p>
+    <p>Role: <strong id="info-role"></strong></p>
+    <p>Department: <strong id="info-dept"></strong></p>
+    <p>Status: <strong id="info-status"></strong></p>
+    <p>Signature: <strong id="info-signature">Loading...</strong></p>
+
+    <script src="../js/api.js"></script>
+    <script>
+        let signaturePad;
+        let currentSignatureData = null;
+        let hasSignature = false;
+
+        // ✅ Use checkAuth from api.js
+        const admin = checkAuth();
+        if (admin.roleId !== 1) window.location.href = '../login.html';
+        document.getElementById('admin-name').textContent = '👑 ' + admin.fullName;
+
+        function showStatus(msg, isError = false) {
+            const status = document.getElementById('status');
+            status.innerHTML = msg;
+            status.style.color = isError ? 'red' : 'green';
+            status.style.fontWeight = 'bold';
+            setTimeout(() => { status.innerHTML = ''; }, 4000);
+        }
+
+        // Initialize Signature Pad
+        function initSignaturePad() {
+            const canvas = document.getElementById('signature-canvas');
+            signaturePad = new SignaturePad(canvas, {
+                backgroundColor: 'rgb(255, 255, 255)',
+                penColor: 'rgb(0, 0, 0)',
+                minWidth: 0.5,
+                maxWidth: 2.5
+            });
+
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+        }
+
+        function resizeCanvas() {
+            const canvas = document.getElementById('signature-canvas');
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            canvas.width = canvas.offsetWidth * ratio;
+            canvas.height = 200 * ratio;
+            canvas.getContext('2d').scale(ratio, ratio);
+            signaturePad.clear();
+            if (currentSignatureData) signaturePad.fromData(currentSignatureData);
+        }
+
+        async function loadInfo() {
+            try {
+                const [users, departments] = await Promise.all([
+                    fetchData('User'),
+                    fetchData('Department')
+                ]);
+
+                const me = users.find(u => u.userId === admin.userId);
+                const dept = departments.find(d => d.departmentId === me.departmentId);
+
+                document.getElementById('update-name').value = me.fullName;
+                document.getElementById('info-email').textContent = me.email;
+                document.getElementById('info-role').textContent = me.roleId === 1 ? '👑 Admin' : '👤 User';
+                document.getElementById('info-dept').textContent = dept ? dept.departmentName : 'N/A';
+                document.getElementById('info-status').textContent = me.status;
+
+                // Load signature info
+                if (me.signatureData) {
+                    currentSignatureData = JSON.parse(me.signatureData);
+                    document.getElementById('signature-preview').style.display = 'block';
+                    document.getElementById('signature-image').src = me.signatureImage || '';
+                    document.getElementById('download-btn').style.display = 'inline-block';
+                    document.getElementById('remove-btn').style.display = 'inline-block';
+                    hasSignature = true;
+                    document.getElementById('info-signature').textContent = '✅ Enabled';
+                    document.getElementById('info-signature').style.color = '#28a745';
+                } else {
+                    document.getElementById('info-signature').textContent = '❌ Not Set';
+                    document.getElementById('info-signature').style.color = '#dc3545';
+                }
+
+                // Update localStorage
+                Object.assign(admin, me);
+                localStorage.setItem('user', JSON.stringify(admin));
+
+            } catch(e) {
+                showStatus('❌ Failed to load info', true);
+            }
+        }
+
+        async function saveSignature() {
+            if (signaturePad.isEmpty()) {
+                showStatus('❌ Please draw your signature first!', true);
+                return;
+            }
+
+            try {
+                const users = await fetchData('User');
+                const me = users.find(u => u.userId === admin.userId);
+                
+                const sigData = signaturePad.toData();
+                const sigImage = signaturePad.toDataURL('image/png');
+                
+                me.signatureData = JSON.stringify(sigData);
+                me.signatureImage = sigImage;
+                
+                await putData(`User/${admin.userId}`, me);
+
+                // Update UI
+                document.getElementById('signature-preview').style.display = 'block';
+                document.getElementById('signature-image').src = sigImage;
+                document.getElementById('download-btn').style.display = 'inline-block';
+                document.getElementById('remove-btn').style.display = 'inline-block';
+                hasSignature = true;
+                document.getElementById('info-signature').textContent = '✅ Enabled';
+                document.getElementById('info-signature').style.color = '#28a745';
+
+                // Update localStorage
+                admin.signatureData = me.signatureData;
+                admin.signatureImage = me.signatureImage;
+                localStorage.setItem('user', JSON.stringify(admin));
+
+                showStatus('✅ Signature saved successfully!');
+                
+            } catch(e) {
+                showStatus('❌ Failed to save signature', true);
+                console.error(e);
+            }
+        }
+
+        function clearSignature() {
+            signaturePad.clear();
+            document.getElementById('signature-preview').style.display = 'none';
+        }
+
+        async function removeSignature() {
+            if (confirm('Remove your e-signature? This cannot be undone.')) {
+                try {
+                    const users = await fetchData('User');
+                    const me = users.find(u => u.userId === admin.userId);
+                    
+                    me.signatureData = null;
+                    me.signatureImage = null;
+                    
+                    await putData(`User/${admin.userId}`, me);
+
+                    // Reset UI
+                    document.getElementById('signature-preview').style.display = 'none';
+                    document.getElementById('download-btn').style.display = 'none';
+                    document.getElementById('remove-btn').style.display = 'none';
+                    hasSignature = false;
+                    document.getElementById('info-signature').textContent = '❌ Not Set';
+                    document.getElementById('info-signature').style.color = '#dc3545';
+                    signaturePad.clear();
+
+                    // Update localStorage
+                    delete admin.signatureData;
+                    delete admin.signatureImage;
+                    localStorage.setItem('user', JSON.stringify(admin));
+
+                    showStatus('✅ Signature removed!');
+                    
+                } catch(e) {
+                    showStatus('❌ Failed to remove signature', true);
+                }
+            }
+        }
+
+        function downloadSignature() {
+            if (admin.signatureImage) {
+                const link = document.createElement('a');
+                link.download = `signature_${admin.userId}.png`;
+                link.href = admin.signatureImage;
+                link.click();
+            }
+        }
+
+        async function updateName() {
+            const newName = document.getElementById('update-name').value.trim();
+
+            if (!newName) {
+                showStatus('❌ Please enter a name!', true);
+                return;
+            }
+
+            try {
+                const users = await fetchData('User');
+                const me = users.find(u => u.userId === admin.userId);
+                me.fullName = newName;
+
+                await putData(`User/${admin.userId}`, me);
+
+                // Update localStorage
+                admin.fullName = newName;
+                localStorage.setItem('user', JSON.stringify(admin));
+                document.getElementById('admin-name').textContent = '👑 ' + newName;
+
+                showStatus('✅ Name updated successfully!');
+
+            } catch(e) {
+                showStatus('❌ Failed to update name', true);
+            }
+        }
+
+        async function updatePassword() {
+            const currentPassword = document.getElementById('current-password').value;
+            const newPassword = document.getElementById('new-password').value;
+            const confirmPassword = document.getElementById('confirm-password').value;
+
+            if (!currentPassword || !newPassword || !confirmPassword) {
+                showStatus('❌ Please fill in all fields!', true);
+                return;
+            }
+
+            if (newPassword !== confirmPassword) {
+                showStatus('❌ New passwords do not match!', true);
+                return;
+            }
+
+            if (newPassword.length < 6) {
+                showStatus('❌ Password must be at least 6 characters!', true);
+                return;
+            }
+
+            try {
+                const users = await fetchData('User');
+                const me = users.find(u => u.userId === admin.userId);
+
+                // Verify current password
+                const hashedCurrent = await hashPassword(currentPassword);
+                if (me.password !== hashedCurrent) {
+                    showStatus('❌ Current password is wrong!', true);
+                    return;
+                }
+
+                // Update with new hashed password
+                me.password = await hashPassword(newPassword);
+                await putData(`User/${admin.userId}`, me);
+
+                // Clear fields
+                document.getElementById('current-password').value = '';
+                document.getElementById('new-password').value = '';
+                document.getElementById('confirm-password').value = '';
+
+                showStatus('✅ Password changed successfully!');
+
+            } catch(e) {
+                showStatus('❌ Failed to change password', true);
+            }
+        }
+
+        // Initialize everything
+        initSignaturePad();
+        loadInfo();
+    </script>
+</body>
+</html>
