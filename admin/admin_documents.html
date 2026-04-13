@@ -64,6 +64,7 @@
         #preview-frame { width: 100%; flex: 1; border: none; }
         #preview-image { max-width: 100%; max-height: calc(90vh - 100px); object-fit: contain; display: none; margin: auto; }
         #preview-unsupported { display: none; text-align: center; padding: 50px; }
+        .error-box { background: #ffebee; color: #c62828; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #c62828; }
         
         #reject-modal {
             display: none;
@@ -166,6 +167,7 @@
                         <button onclick="closePreview()">❌ Close</button>
                     </div>
                 </div>
+                <div id="preview-error" class="error-box" style="display:none;"></div>
                 <iframe id="preview-frame" src=""></iframe>
                 <img id="preview-image" src="">
                 <div id="preview-unsupported">
@@ -198,6 +200,9 @@
         let currentStatusFilter = 'All';
         let currentCategoryFilter = 0;
         let currentAdmin = null;
+
+        // API base for file access
+        const API_BASE_URL = 'https://qmsapi-production.up.railway.app';
 
         // ==================== AUTHENTICATION ====================
         function initAuth() {
@@ -243,16 +248,28 @@
             });
         }
 
-        // Get file URL for preview/download
+        // ✅ FIXED: Properly encode URL and handle file paths
         function getFileUrl(filePath) {
             if (!filePath) return null;
+            
+            console.log('Original filePath:', filePath);
+            
             // If it's already a full URL
-            if (filePath.startsWith('http')) return filePath;
+            if (filePath.startsWith('http')) {
+                return filePath;
+            }
+            
             // Remove leading slash if present
             let cleanPath = filePath.startsWith('/') ? filePath.substring(1) : filePath;
-            // Use the API URL base without /api
-            const baseUrl = 'https://qmsapi-production.up.railway.app';
-            return `${baseUrl}/${cleanPath}`;
+            
+            // ✅ URL Encode the filename to handle spaces and special characters
+            const parts = cleanPath.split('/');
+            const encodedParts = parts.map(part => encodeURIComponent(part));
+            const encodedPath = encodedParts.join('/');
+            
+            const fullUrl = `${API_BASE_URL}/${encodedPath}`;
+            console.log('Encoded URL:', fullUrl);
+            return fullUrl;
         }
 
         // ==================== LOAD DATA ====================
@@ -272,14 +289,18 @@
                 allDepartments = depts;
                 allCategories = cats;
 
-                console.log('Loaded:', { docs: docs.length, users: users.length, categories: cats.length });
+                console.log('Loaded documents:', docs.length);
+                
+                // Log file paths for debugging
+                docs.forEach(doc => {
+                    if (doc.filePath) {
+                        console.log(`Document "${doc.title}" filePath:`, doc.filePath);
+                    }
+                });
 
-                // Populate dropdowns
                 populateCategoryDropdown();
                 populateDepartmentDropdown();
                 renderCategoryFilters();
-                
-                // Apply filters and render table
                 applyFilters();
                 
                 showStatus(`✅ Loaded ${docs.length} documents`);
@@ -363,6 +384,10 @@
                 
                 const hasFile = !!doc.filePath;
                 const fileName = doc.fileName || doc.title || 'Document';
+                const fileExt = (fileName.split('.').pop() || '').toLowerCase();
+                
+                // Escape the filePath for the onclick handler
+                const escapedFilePath = doc.filePath ? doc.filePath.replace(/'/g, "\\'") : '';
                 
                 return `
                     <tr>
@@ -371,7 +396,7 @@
                         <td>${uploader ? escapeHtml(uploader.fullName) : 'N/A'}</td>
                         <td>${department ? escapeHtml(department.departmentName) : 'N/A'}</td>
                         <td>${category ? escapeHtml(category.categoryName) : 'N/A'}</td>
-                        <td>${hasFile ? `<button onclick="previewDoc('${escapeHtml(doc.filePath)}', '${escapeHtml(fileName)}')">👁️ Preview</button>` : 'No file'}</td>
+                        <td>${hasFile ? `<button onclick="previewDoc('${escapedFilePath}', '${escapeHtml(fileName)}', '${fileExt}')">👁️ Preview</button>` : 'No file'}</td>
                         <td><span class="badge ${statusClass}">${doc.status}</span></td>
                         <td>${new Date(doc.createdAt).toLocaleDateString()}</td>
                         <td class="action-buttons">
@@ -386,14 +411,19 @@
         }
 
         // ==================== PREVIEW FUNCTION ====================
-        function previewDoc(filePath, fileName) {
+        function previewDoc(filePath, fileName, fileExt) {
             const fileUrl = getFileUrl(filePath);
-            console.log('Preview URL:', fileUrl);
+            
+            console.log('Preview - Original path:', filePath);
+            console.log('Preview - Constructed URL:', fileUrl);
             
             if (!fileUrl) {
                 alert('No file available for preview');
                 return;
             }
+
+            const errorDiv = document.getElementById('preview-error');
+            errorDiv.style.display = 'none';
 
             document.getElementById('preview-title').textContent = `📄 ${fileName}`;
             document.getElementById('preview-download').href = fileUrl;
@@ -409,16 +439,14 @@
             img.style.display = 'none';
             unsupported.style.display = 'none';
             frame.src = '';
-
-            // Get file extension
-            const ext = (fileName.split('.').pop() || '').toLowerCase();
             
-            if (ext === 'pdf') {
+            // Check file extension
+            if (fileExt === 'pdf') {
                 // PDF - use iframe
                 frame.src = fileUrl;
                 frame.style.display = 'block';
             } 
-            else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext)) {
+            else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(fileExt)) {
                 // Images - display directly
                 img.src = fileUrl;
                 img.style.display = 'block';
@@ -451,7 +479,6 @@
             try {
                 showStatus('📤 Uploading document...');
 
-                // Determine uploadedBy user
                 let uploadedBy = currentAdmin.userId;
                 if (departmentId) {
                     const deptUser = allUsers.find(u => u.departmentId === parseInt(departmentId));
@@ -466,7 +493,9 @@
                     formData.append('uploadedBy', uploadedBy);
                     formData.append('description', description);
                     formData.append('status', status);
-                    await uploadFile(formData);
+                    
+                    const result = await uploadFile(formData);
+                    console.log('Upload result:', result);
                 } else {
                     await postData('Document', {
                         title: title,
