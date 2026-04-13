@@ -107,14 +107,14 @@ body {
     top: 0;
     left: 0;
     width: 100%;
-    background: var(--dark);
+    background: var(--navy);
     box-shadow: var(--shadow-md);
     z-index: 1000;
     transition: var(--transition);
 }
 
 .navbar.scrolled {
-    background: var(--dark);
+    background: var(--navy);
     box-shadow: var(--shadow-lg);
 }
 
@@ -847,7 +847,7 @@ body {
 
 /* ========== FOOTER ========== */
 .footer {
-    background: var(--dark);
+    background: var(--navy);
     color: var(--gray-light);
     padding: 4rem 2rem 2rem;
 }

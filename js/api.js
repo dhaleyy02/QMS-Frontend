@@ -1,4 +1,4 @@
-const API_URL = 'https://your-railway-url.up.railway.app/api';
+const API_URL = 'https://qmsapi-production.up.railway.app/api';
 
 async function fetchData(endpoint) {
     try {
