@@ -387,41 +387,40 @@
 
         // ── PREVIEW ──
         function previewDoc(filePath, fileName, fileType) {
-            const fileUrl = `http://localhost:5227${filePath}`;
+            // ✅ FIX: Use the BASE_URL from api.js instead of hardcoded localhost
+            // We remove /api from the BASE_URL if it exists to get the root server path
+            const serverRoot = BASE_URL.replace('/api', '');
+            const fileUrl = `${serverRoot}${filePath}`;
 
             document.getElementById('preview-title').textContent = `📄 ${fileName}`;
             document.getElementById('preview-download').href = fileUrl;
             document.getElementById('preview-modal').style.display = 'block';
 
-            document.getElementById('preview-frame').style.display = 'none';
-            document.getElementById('preview-image').style.display = 'none';
-            document.getElementById('preview-unsupported').style.display = 'none';
+            const frame = document.getElementById('preview-frame');
+            const img = document.getElementById('preview-image');
+            const unsupported = document.getElementById('preview-unsupported');
 
-            if (fileType.includes('pdf')) {
-                document.getElementById('preview-frame').src = fileUrl;
-                document.getElementById('preview-frame').style.display = 'block';
-            } else if (fileType.includes('image')) {
-                document.getElementById('preview-image').src = fileUrl;
-                document.getElementById('preview-image').style.display = 'block';
+            // Reset displays
+            frame.style.display = 'none';
+            img.style.display = 'none';
+            unsupported.style.display = 'none';
+            frame.src = ''; // Clear previous src
+
+            // Logic to display based on type
+            const type = fileType ? fileType.toLowerCase() : '';
+            
+            if (type.includes('pdf')) {
+                frame.src = fileUrl;
+                frame.style.display = 'block';
+            } else if (type.includes('image') || filePath.match(/\.(jpg|jpeg|png|gif)$/i)) {
+                img.src = fileUrl;
+                img.style.display = 'block';
             } else {
-                document.getElementById('preview-unsupported').style.display = 'block';
+                // For Word/Excel, browser can't preview directly usually, so show download
+                unsupported.style.display = 'block';
                 document.getElementById('unsupported-download').href = fileUrl;
             }
         }
-
-        function closePreview() {
-            document.getElementById('preview-modal').style.display = 'none';
-            document.getElementById('preview-frame').src = '';
-            document.getElementById('preview-image').src = '';
-        }
-
-        document.getElementById('preview-modal').addEventListener('click', function(e) {
-            if (e.target === this) closePreview();
-        });
-
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') closePreview();
-        });
 
         // ── VIEW DETAILS ──
         function viewDoc(id) {
@@ -430,6 +429,10 @@
             const uploader = allUsers.find(u => u.userId === d.uploadedBy);
             const dept = uploader ? allDepartments.find(dep => dep.departmentId === uploader.departmentId) : null;
 
+            // ✅ FIX: Dynamic URL for the details view download link
+            const serverRoot = BASE_URL.replace('/api', '');
+            const fileUrl = `${serverRoot}${d.filePath}`;
+
             document.getElementById('view-title').textContent = d.title || 'N/A';
             document.getElementById('view-category').textContent = cat ? cat.categoryName : 'N/A';
             document.getElementById('view-uploader').textContent = uploader ? uploader.fullName : 'N/A';
@@ -437,9 +440,10 @@
             document.getElementById('view-status').textContent = d.status;
             document.getElementById('view-description').textContent = d.description || 'No description';
             document.getElementById('view-date').textContent = new Date(d.createdAt).toLocaleDateString();
+            
             document.getElementById('view-file').innerHTML = d.filePath
                 ? `<button onclick="previewDoc('${d.filePath}', '${d.fileName || 'Document'}', '${d.fileType || ''}')">👁️ Preview</button>
-                   <a href="http://localhost:5227${d.filePath}" target="_blank" style="margin-left:10px;">⬇️ Download</a>`
+                   <a href="${fileUrl}" target="_blank" style="margin-left:10px;">⬇️ Download</a>`
                 : 'No file attached';
 
             document.getElementById('edit-form').style.display = 'none';
@@ -447,10 +451,7 @@
             window.scrollTo(0, document.getElementById('view-form').offsetTop);
         }
 
-        function closeView() {
-            document.getElementById('view-form').style.display = 'none';
-        }
-
+        
         // ── QUICK STATUS ──
         async function quickStatus(id, newStatus) {
             if (newStatus === 'Rejected') {
