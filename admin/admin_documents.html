@@ -39,7 +39,7 @@
         .btn-warning { background: #ffc107; color: #333; }
         .btn-warning:hover { background: #e0a800; }
         input, select, textarea { padding: 8px; border: 1px solid #ddd; border-radius: 5px; width: 100%; max-width: 400px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; overflow-x: auto; display: block; }
         th { background: #1e3c72; color: white; padding: 10px; text-align: left; }
         td { padding: 8px; border-bottom: 1px solid #ddd; }
         tr:hover { background: #f5f5f5; }
@@ -139,6 +139,21 @@
         .badge-approved { background: #28a745; color: white; }
         .badge-rejected { background: #dc3545; color: white; }
         .badge-archived { background: #6c757d; color: white; }
+
+        .table-wrapper {
+            overflow-x: auto;
+            width: 100%;
+        }
+        
+        .action-buttons {
+            white-space: nowrap;
+        }
+        
+        .action-buttons button {
+            margin: 2px;
+            padding: 5px 8px;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
@@ -201,24 +216,26 @@
         <h3 id="table-title">All Documents</h3>
         <span id="doc-count"></span>
 
-        <table>
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Title</th>
-                    <th>Uploaded By</th>
-                    <th>Department</th>
-                    <th>Category</th>
-                    <th>File</th>
-                    <th>Status</th>
-                    <th>Date</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="docs-table">
-                <tr><td colspan="9">🔄 Loading...</td></tr>
-            </tbody>
-        </table>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Title</th>
+                        <th>Uploaded By</th>
+                        <th>Department</th>
+                        <th>Category</th>
+                        <th>File</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="docs-table">
+                    <tr><td colspan="9">🔄 Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
 
         <!-- View Details -->
         <div id="view-form" style="display:none; padding:20px; border:2px solid #1e3c72; margin:20px 0; border-radius:10px;">
@@ -298,9 +315,12 @@
         }
         document.getElementById('admin-name').textContent = '👑 ' + admin.fullName;
 
-        // ✅ IMPORTANT: Get the base URL for file access
-        const API_BASE_URL = API_URL; // From api.js
-        const SERVER_BASE_URL = API_BASE_URL.replace('/api', ''); // Remove /api to get root
+        // ✅ Get the base URL for file access - remove /api to get root
+        const API_BASE_URL = API_URL;
+        const SERVER_BASE_URL = API_BASE_URL.replace('/api', '');
+        
+        console.log('API_BASE_URL:', API_BASE_URL);
+        console.log('SERVER_BASE_URL:', SERVER_BASE_URL);
 
         function showStatus(msg, isError = false) {
             const statusDiv = document.getElementById('status');
@@ -332,6 +352,9 @@
                 allUsers = users;
                 allDepartments = depts;
                 allCategories = cats;
+                
+                console.log('Loaded documents:', allDocs.length);
+                console.log('Sample document:', allDocs[0]);
 
                 populateCategories();
                 populateDepartments();
@@ -340,6 +363,7 @@
                 showStatus(`✅ ${docs.length} documents loaded`);
 
             } catch(e) {
+                console.error('Load error:', e);
                 showStatus('❌ ' + e.message, true);
             }
         }
@@ -385,12 +409,22 @@
             renderDocs(filtered);
         }
 
+        // ✅ FIXED: Get the full file URL
         function getFileUrl(filePath) {
             if (!filePath) return null;
-            // If filePath starts with http, use as is
-            if (filePath.startsWith('http')) return filePath;
-            // Otherwise, combine with server base URL
-            return `${SERVER_BASE_URL}${filePath}`;
+            
+            // If it's already a full URL, return as is
+            if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+                return filePath;
+            }
+            
+            // Remove any leading slashes to avoid double slashes
+            let cleanPath = filePath.startsWith('/') ? filePath.substring(1) : filePath;
+            
+            // Construct the full URL
+            const fullUrl = `${SERVER_BASE_URL}/${cleanPath}`;
+            console.log('File URL:', fullUrl);
+            return fullUrl;
         }
 
         function renderDocs(docs) {
@@ -413,8 +447,11 @@
                 else if (d.status === 'Rejected') statusClass = 'badge-rejected';
                 else if (d.status === 'Archived') statusClass = 'badge-archived';
                 
-                const fileUrl = getFileUrl(d.filePath);
-                const hasFile = !!d.filePath;
+                const hasFile = !!(d.filePath);
+                const fileName = d.fileName || d.title || 'Document';
+                const fileExt = (fileName.split('.').pop() || '').toLowerCase();
+                const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(fileExt);
+                const isPdf = fileExt === 'pdf';
                 
                 return `
                     <tr>
@@ -423,11 +460,11 @@
                         <td>${uploader ? escapeHtml(uploader.fullName) : 'N/A'}</td>
                         <td>${dept ? escapeHtml(dept.departmentName) : 'N/A'}</td>
                         <td>${cat ? escapeHtml(cat.categoryName) : 'N/A'}</td>
-                        <td>${hasFile ? `<button onclick="previewDoc('${escapeHtml(d.filePath)}', '${escapeHtml(d.fileName || d.title)}', '${escapeHtml(d.fileType || '')}')">👁️ Preview</button>` : 'No file'}</td>
+                        <td>${hasFile ? `<button onclick="previewDoc(${JSON.stringify(escapeHtml(d.filePath))}, ${JSON.stringify(escapeHtml(fileName))}, ${JSON.stringify(fileExt)})">👁️ Preview</button>` : 'No file'}</td>
                         <td><span class="badge ${statusClass}">${d.status}</span></td>
                         <td>${new Date(d.createdAt).toLocaleDateString()}</td>
-                        <td>
-                            <button onclick="viewDoc(${d.documentId})">📋 Details</button>
+                        <td class="action-buttons">
+                            <button onclick="viewDoc(${d.documentId})">📋</button>
                             <button onclick="quickStatus(${d.documentId}, 'Approved')" class="btn-success">✅</button>
                             <button onclick="quickStatus(${d.documentId}, 'Rejected')" class="btn-danger">❌</button>
                             <button onclick="quickStatus(${d.documentId}, 'Archived')" class="btn-warning">🗃️</button>
@@ -439,8 +476,8 @@
             }).join('');
         }
 
-        // ✅ FIXED: Preview function for Railway hosted files
-        function previewDoc(filePath, fileName, fileType) {
+        // ✅ FIXED: Preview function with working download
+        function previewDoc(filePath, fileName, fileExt) {
             const fileUrl = getFileUrl(filePath);
             
             if (!fileUrl) {
@@ -449,11 +486,14 @@
             }
 
             console.log('Preview URL:', fileUrl);
-            console.log('File Type:', fileType);
+            console.log('File extension:', fileExt);
 
             document.getElementById('preview-title').textContent = `📄 ${fileName || 'Document'}`;
+            
+            // Set download links
             document.getElementById('preview-download').href = fileUrl;
             document.getElementById('unsupported-download').href = fileUrl;
+            
             document.getElementById('preview-modal').style.display = 'block';
 
             const frame = document.getElementById('preview-frame');
@@ -466,36 +506,27 @@
             unsupported.style.display = 'none';
             frame.src = '';
 
-            const type = (fileType || '').toLowerCase();
-            const extension = (fileName || '').split('.').pop().toLowerCase();
-
-            // Check for PDF
-            if (type.includes('pdf') || extension === 'pdf') {
+            // Check file type
+            if (fileExt === 'pdf') {
+                // For PDF files
                 frame.src = fileUrl;
                 frame.style.display = 'block';
             }
-            // Check for images
-            else if (type.includes('image') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(extension)) {
+            else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(fileExt)) {
+                // For images
                 img.src = fileUrl;
                 img.style.display = 'block';
             }
-            // For Word, Excel - show download option (browsers can't preview these directly)
-            else if (type.includes('word') || type.includes('document') || 
-                     type.includes('excel') || type.includes('sheet') ||
-                     ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(extension)) {
-                unsupported.style.display = 'block';
-            }
-            // Try iframe for other types
             else {
-                frame.src = fileUrl;
-                frame.style.display = 'block';
+                // For Word, Excel, and other files - show download option
+                unsupported.style.display = 'block';
             }
         }
 
         function closePreview() {
             document.getElementById('preview-modal').style.display = 'none';
             const frame = document.getElementById('preview-frame');
-            frame.src = ''; // Stop loading
+            frame.src = '';
         }
 
         async function addDocument() {
@@ -546,6 +577,7 @@
                 await loadDocuments();
 
             } catch(e) {
+                console.error('Add error:', e);
                 showStatus('❌ Add failed: ' + e.message, true);
             }
         }
@@ -567,6 +599,8 @@
             const uploader = allUsers.find(u => u.userId === d.uploadedBy);
             const dept = uploader ? allDepartments.find(dep => dep.departmentId === uploader.departmentId) : null;
             const fileUrl = getFileUrl(d.filePath);
+            const fileName = d.fileName || d.title || 'Document';
+            const fileExt = (fileName.split('.').pop() || '').toLowerCase();
 
             document.getElementById('view-title').textContent = d.title || 'N/A';
             document.getElementById('view-category').textContent = cat ? cat.categoryName : 'N/A';
@@ -577,8 +611,8 @@
             document.getElementById('view-date').textContent = new Date(d.createdAt).toLocaleDateString();
             
             document.getElementById('view-file').innerHTML = d.filePath
-                ? `<button onclick="previewDoc('${escapeHtml(d.filePath)}', '${escapeHtml(d.fileName || d.title)}', '${escapeHtml(d.fileType || '')}')">👁️ Preview</button>
-                   <a href="${fileUrl}" target="_blank" style="margin-left:10px;">⬇️ Download</a>`
+                ? `<button onclick="previewDoc('${escapeHtml(d.filePath)}', '${escapeHtml(fileName)}', '${fileExt}')">👁️ Preview</button>
+                   <a href="${fileUrl}" download style="margin-left:10px;">⬇️ Download</a>`
                 : 'No file attached';
 
             document.getElementById('edit-form').style.display = 'none';
